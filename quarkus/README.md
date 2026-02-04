@@ -8,6 +8,9 @@ and prerequisites](https://github.com/keycloak/keycloak/blob/main/docs/building.
 This module holds the codebase to run Keycloak on top of [Quarkus](https://quarkus.io/):
 
 ```
+├── config-api
+│   ├── Configuration API for modules to avoid direct Quarkus coupling (e.g. for REST services)
+│
 ├── container
 │   ├── Dockerfile, e.g. used by the Testsuite
 │
@@ -15,7 +18,7 @@ This module holds the codebase to run Keycloak on top of [Quarkus](https://quark
 │   ├── Build-time codebase with all the necessary steps to build and configure the server
 │
 ├── dist
-│   ├── Packaging the quarkus distribution
+│   ├── Packaging the Quarkus distribution
 │
 ├── runtime
 │   ├── Runtime codebase with all the runtime code
@@ -24,7 +27,7 @@ This module holds the codebase to run Keycloak on top of [Quarkus](https://quark
 │   ├── The server itself, only responsible for generating the server artifacts
 │
 └── tests
-    ├── Integration tests for the quarkus distribution
+    ├── Integration tests for the Quarkus distribution
 ``` 
 
 ## Prerequisites
@@ -33,9 +36,6 @@ Before using this module, make sure you have a compatible JDK installed. (See [m
     <KEYCLOAK_HOME> $ cd quarkus
 
 * `KEYCLOAK_HOME` is the directory where you cloned the Keycloak repository.
-
-### Activating the Module from the root directory
-When a build from the project root directory is started, this module is only enabled if your installed JDK is 11 or newer. 
 
 ## Building the project the first time
 
@@ -47,11 +47,11 @@ This build can take some time, usually around two to four minutes depending on y
 
 ## Building the Keycloak Quarkus distribution
 
-After the main codebase is built, you can build the quarkus distribution, including the zip and tar.gz files, by invoking the following command:
+After the main codebase is built, you can build the Quarkus distribution, including the zip and tar.gz files, by invoking the following command:
     
     <KEYCLOAK_HOME>/quarkus $ ../mvnw clean install -DskipTests
 
-This command produces the distribution artifacts as ZIP and TAR file. The artifacts for the quarkus distribution will be available at the `/dist/target` subdirectory afterwards.
+This command produces the distribution artifacts as ZIP and TAR file. The artifacts for the Quarkus distribution will be available at the `/dist/target` subdirectory afterwards.
 
 As an alternative, you can build the distribution artifacts directly without a rebuild of the code by running the following command:
 
@@ -90,40 +90,38 @@ For debugging the build steps right after start, you can suspend the JVM by runn
 
 When running using `quarkus:dev` you are able to do live coding whenever you change / add code in the `server` module, for example when creating a new custom provider.
 
-There are currently limitations when running in development mode that block us to use all capabilities the Quarkus development mode has to offer. For instance, hot-reload of transient dependencies from keycloak (e.g.: keycloak-* dependencies) do not work. Expect more improvements in this area, and feel free to reach out if you want to help, using our [discussions](https://github.com/keycloak/keycloak/discussions/categories/keycloak-x-quarkus-distribution) or the development mailing list.
+There are currently limitations when running in development mode that block us to use all capabilities the Quarkus development mode has to offer. For instance, hot-reload of transient dependencies from keycloak (e.g.: keycloak-* dependencies) do not work. Expect more improvements in this area, and feel free to reach out if you want to help, using our [discussions](https://github.com/keycloak/keycloak/discussions) or the development mailing list.
 
 ## Contributing
 Please make sure to read our [Contribution Guidelines](../CONTRIBUTING.md) before contributing.
 
 ## Running tests
-Keycloaks Quarkus distribution module uses a new testsuite more integrated into the quarkus platform.
+Keycloak Quarkus distribution module uses a new testsuite more integrated into the Quarkus platform.
 
 ### Running tests from your IDE
 The tests can also be run from an IDE GUI such as Intellij IDEA. There are different kinds of tests:
 * Unit tests: Located in the respective module (`deployment`, `runtime`)
 * Integration tests:
   * `@CLITest` annotated: These tests have no prerequisites and are whitebox tests, so you can easily debug them.
-  * `@DistributionTest` annotated: These tests need a build of the distribution artifacts first to run. These are blackbox tests, so not as easily debuggable as `@CLITest` annotated tests. Mostly used for scenarios when a `build` is involved or build options need to change, as this invocation happens in a different JVM.
+  * `@DistributionTest` annotated: These tests need a build of the distribution artifacts first to run. These are blackbox tests, so not as easily debuggable as `@CLITest` annotated tests. Mostly used for scenarios when a `build` is involved or build options need to change, as this invocation happens in a different JVM process.
 
 ### Running container-based tests
-The `@DistributionTest` annotated tests can use different runtimes, e.g. plain JVM or a docker container. Per default, they use the plain JVM mode. 
+The `@DistributionTest` annotated tests can use different runtimes, e.g. plain JVM or a Docker container. Per default, they use the plain JVM mode. 
 
-To run them from a container image instead, you need to build the distribution first. Then you can use the flag `-Dkc.quarkus.tests.dist=docker`. This builds a docker image from the provided distribution archives and runs the `@DistributionTest` annotated tests for them.
+To run them from a container image instead, you need to build the distribution first. Then you can use the flag `-Dkc.quarkus.tests.dist=docker`. This builds a Docker image from the provided distribution archives and runs the `@DistributionTest` annotated tests for them.
 
-There are some tests annotated `@RawDistOnly` which prevents them from running in docker. You'll find a short reason in the respective annotation.
-
-The container based tests are using Testcontainers to spin up the container image and can be considered tech preview.
+There are some tests annotated `@RawDistOnly` which prevents them from running in Docker. You'll find a short reason in the respective annotation.
 
 ### Running database tests
 There are also some container based tests to check if Keycloak starts using one of the supported database vendors. They are annotated with `@WithDatabase`. 
 
-These tests are disabled by default. They using Quarkus development mode predefined database containers by default and can be run in the `tests` subdirectory by using e.g. 
+These tests are disabled by default. They're using Quarkus development mode predefined database containers by default and can be run in the `tests` subdirectory by using e.g. 
 
     <KEYCLOAK_HOME>/quarkus $ ../mvnw clean install -Ptest-database -Dtest=MariaDBDistTest
 
 to spin up a MariaDB container and start Keycloak with it.
 
-To use a specific database container image, use the option `-Dkc.db.postgresql.container.image` to specify the image tag of the postgres image to use or `-Dkc.db.mariadb.container.image=<name:tag>` for mariadb.
+To use a specific database container image, use the option `-Dkc.db.postgresql.container.image` to specify the image tag of the Postgres image to use or `-Dkc.db.mariadb.container.image=<name:tag>` for MariaDB.
 
 Example:
 
@@ -131,8 +129,8 @@ Example:
     
 ### Updating Expectations
 
-Changing to the help output will cause HelpCommandDistTest to fail. This test uses [ApprovalTests](https://github.com/approvals/ApprovalTests.Java) which creates `.received.txt` files containing the actual output when tests fail. To update the expected output (see [Approving The Result](https://github.com/approvals/ApprovalTests.Java/blob/master/approvaltests/docs/tutorials/GettingStarted.md#approving-the-result)) run:
+Changing to the help output will cause `HelpCommandDistTest` to fail. This test uses [ApprovalTests](https://github.com/approvals/ApprovalTests.Java) which creates `.received.txt` files containing the actual output when tests fail. To update the expected output (see [Approving The Result](https://github.com/approvals/ApprovalTests.Java/blob/master/approvaltests/docs/tutorials/GettingStarted.md#approving-the-result)) run:
 
-   KEYCLOAK_REPLACE_EXPECTED=true ../mvnw clean install -Dtest=HelpCommandDistTest 
+    KEYCLOAK_REPLACE_EXPECTED=true ../mvnw clean install -Dtest=HelpCommandDistTest 
 
 then use a diff to ensure the changes look good.
