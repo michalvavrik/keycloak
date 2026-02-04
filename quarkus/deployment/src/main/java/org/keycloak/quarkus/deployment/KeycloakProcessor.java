@@ -253,7 +253,6 @@ class KeycloakProcessor {
      */
     @Record(ExecutionTime.STATIC_INIT)
     @BuildStep
-    @Consume(RuntimeConfigSetupCompleteBuildItem.class)
     @Produce(ConfigBuildItem.class)
     void initConfig(KeycloakRecorder recorder) {
         // other buildsteps directly use the Config
