@@ -4,12 +4,17 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonMerge;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
+
+import org.keycloak.utils.StringUtil;
 
 @Schema
 public class OIDCClientRepresentation extends BaseClientRepresentation {
@@ -30,6 +35,7 @@ public class OIDCClientRepresentation extends BaseClientRepresentation {
     private Set<Flow> loginFlows = new LinkedHashSet<>();
 
     @Valid
+    @JsonMerge
     @JsonPropertyDescription("Authentication configuration for this client")
     private Auth auth;
 
@@ -147,5 +153,23 @@ public class OIDCClientRepresentation extends BaseClientRepresentation {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), loginFlows, auth, webOrigins, serviceAccountRoles);
+    }
+
+    @JsonIgnore
+    @Override
+    public void updateFieldsOnMerge(BaseClientRepresentation o) {
+
+        // we need to prevent situations when the client secret is regenerated if the patch does not contain it
+        // but the target of the patch (AKA: what we patch) already has the client secret;
+        // note: null 'auth' object is handled correctly OOTB, hence this method is not concerned with it
+        // as we have tests which verifies it works
+        boolean hasAuthButNoSecret = auth != null && StringUtil.isNullOrEmpty(auth.secret);
+        if (hasAuthButNoSecret && o instanceof OIDCClientRepresentation mergeTarget && mergeTarget.auth != null) {
+            boolean mergeTargetHasSecret = StringUtil.isNotBlank(mergeTarget.auth.secret);
+            boolean authMethodsMatch = auth.method != null && auth.method.equals(mergeTarget.auth.method);
+            if (mergeTargetHasSecret && authMethodsMatch) {
+                auth.secret = mergeTarget.auth.secret;
+            }
+        }
     }
 }

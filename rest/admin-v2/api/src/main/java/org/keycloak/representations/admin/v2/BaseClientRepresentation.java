@@ -4,6 +4,8 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.validation.constraints.NotBlank;
 
 import org.keycloak.representations.admin.v2.validation.CreateClient;
@@ -126,5 +128,18 @@ public abstract class BaseClientRepresentation extends BaseRepresentation {
     @Override
     public int hashCode() {
         return Objects.hash(clientId, displayName, description, enabled, appUrl, redirectUris, roles, additionalFields);
+    }
+
+    /**
+     * Allows to customize merging of two {@link BaseClientRepresentation}s by manually merging certain fields of
+     * the {@code mergeTargetClientRepresentation} into this instance.
+     * When you want to avoid {@link com.fasterxml.jackson.annotation.JsonMerge} or custom deserializer for certain
+     * fields, override this method to handle merging of these fields manually.
+     *
+     * @param mergeTargetClientRepresentation the client representation with fields that should be merged into this one
+     */
+    @JsonIgnore
+    public void updateFieldsOnMerge(BaseClientRepresentation mergeTargetClientRepresentation) {
+        // NOOP
     }
 }
