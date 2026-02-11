@@ -5,10 +5,13 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.keycloak.authentication.authenticators.client.ClientIdAndSecretAuthenticator;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RoleModel;
 import org.keycloak.representations.admin.v2.OIDCClientRepresentation;
+import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.utils.StringUtil;
 
 /**
  * @author Vaclav Muzikar <vmuzikar@redhat.com>
@@ -44,9 +47,20 @@ public class OIDCClientModelMapper extends BaseClientModelMapper<OIDCClientRepre
         if (rep.getAuth() != null) {
             model.setPublicClient(false);
             model.setClientAuthenticatorType(rep.getAuth().getMethod());
-            model.setSecret(rep.getAuth().getSecret());
+
+            // if the current model has client secret and the new representation doesn't, do not regenerate the secret
+            boolean canSetSecret = StringUtil.isNotBlank(rep.getAuth().getSecret()) || !isClientSecret(rep.getAuth().getMethod());
+            if (canSetSecret) {
+                model.setSecret(rep.getAuth().getSecret());
+            }
         } else {
-            model.setPublicClient(true);
+
+            // if the current model has client secret, don't turn the client into public one; this prevents regeneration
+            // of existing client secret when unintended
+            boolean isClientSecretNotSet = StringUtil.isNullOrEmpty(model.getSecret()) || !isClientSecret(model.getClientAuthenticatorType());
+            if (isClientSecretNotSet) {
+                model.setPublicClient(true);
+            }
         }
 
         setModelFromFlows(rep.getLoginFlows(), model);
@@ -90,5 +104,21 @@ public class OIDCClientModelMapper extends BaseClientModelMapper<OIDCClientRepre
             }
         }
         return Collections.emptySet();
+    }
+
+    @Override
+    protected void updateOldClientRepresentation(OIDCClientRepresentation client, ClientRepresentation oldRepresentation) {
+        var auth = client.getAuth();
+        if (auth != null) {
+            oldRepresentation.setPublicClient(false);
+            oldRepresentation.setClientAuthenticatorType(auth.getMethod());
+            if (isClientSecret(auth.getMethod())) {
+                oldRepresentation.setSecret(auth.getSecret());
+            }
+        }
+    }
+
+    private static boolean isClientSecret(String method) {
+        return ClientIdAndSecretAuthenticator.PROVIDER_ID.equals(method);
     }
 }

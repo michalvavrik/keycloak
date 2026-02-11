@@ -19,7 +19,6 @@ import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 import org.keycloak.representations.admin.v2.OIDCClientRepresentation;
 import org.keycloak.representations.admin.v2.validation.CreateClientDefault;
-import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.services.ServiceException;
 import org.keycloak.services.resources.admin.ClientResource;
@@ -89,9 +88,7 @@ public class DefaultClientService implements ClientService {
 
             // First, create a basic v1 representation to persist the client in the database.
             // We can't use mapper.toModel(client) directly for creation because the "detached model"
-            var basicRep = new ClientRepresentation();
-            basicRep.setClientId(client.getClientId());
-            basicRep.setProtocol(client.getProtocol());
+            var basicRep = mapper.createOldClientRepresentation(client);
 
             // Create the client in the database
             model = clientsResource.createClientModel(basicRep);

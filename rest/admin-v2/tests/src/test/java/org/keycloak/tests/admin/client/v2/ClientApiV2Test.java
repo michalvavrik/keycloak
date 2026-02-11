@@ -17,14 +17,18 @@
 
 package org.keycloak.tests.admin.client.v2;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 
+import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+
 import org.keycloak.admin.api.AdminApi;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.authentication.authenticators.client.ClientIdAndSecretAuthenticator;
 import org.keycloak.common.Profile;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 import org.keycloak.representations.admin.v2.OIDCClientRepresentation;
@@ -52,6 +56,11 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.Test;
+
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.emptyOrNullString;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 
 import static org.keycloak.services.cors.Cors.ACCESS_CONTROL_ALLOW_METHODS;
 import static org.keycloak.services.cors.Cors.ORIGIN_HEADER;
@@ -241,6 +250,10 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
 
         try (var response = client.execute(oidcRequest)) {
             assertEquals(201, response.getStatusLine().getStatusCode());
+
+            OIDCClientRepresentation representation = mapper.readValue(response.getEntity().getContent(), OIDCClientRepresentation.class);
+            assertThat(representation, notNullValue());
+            assertThat("Public client must not have authentication configuration", representation.getAuth(), nullValue());
         }
 
         // Create a SAML client with SAML-specific fields
@@ -288,6 +301,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
             assertThat("OIDC client should be in the list", foundOidc, is(notNullValue()));
             assertThat(foundOidc.getLoginFlows(), is(Set.of(OIDCClientRepresentation.Flow.STANDARD, OIDCClientRepresentation.Flow.DIRECT_GRANT)));
             assertThat(foundOidc.getWebOrigins(), is(Set.of("http://localhost:3000", "http://localhost:4000")));
+            assertThat("Public client must not have authentication configuration", foundOidc.getAuth(), nullValue());
 
             // Verify SAML client with protocol-specific fields
             SAMLClientRepresentation foundSaml = clients.stream()
@@ -614,6 +628,168 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
             var header = response.getFirstHeader(ACCESS_CONTROL_ALLOW_METHODS);
             assertThat(header, notNullValue());
             assertThat(header.getValue(), is("DELETE, POST, GET, PUT"));
+        }
+    }
+
+    @Test
+    public void clientSecretGenerationInPostRequest() throws IOException {
+        String clientId = "secret-generation-post";
+        HttpPost request = new HttpPost(getClientsApiUrl());
+        setAuthHeader(request);
+        request.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
+        OIDCClientRepresentation.Auth auth = new OIDCClientRepresentation.Auth();
+        auth.setMethod(ClientIdAndSecretAuthenticator.PROVIDER_ID);
+        auth.setSecret(null);
+
+        OIDCClientRepresentation.Auth createdAuth = getResultingAuthConfig(auth, request, clientId);
+        assertThat(createdAuth, notNullValue());
+        assertThat(createdAuth.getSecret(), not(emptyOrNullString()));
+
+        // make sure that the created model was persisted and GET method returns the newly generated secret
+        HttpGet getRequest = new HttpGet(getClientsApiUrl() + "/" + clientId);
+        setAuthHeader(getRequest);
+        try (var response = client.execute(getRequest)) {
+            assertEquals(200, response.getStatusLine().getStatusCode());
+            OIDCClientRepresentation client = mapper.createParser(response.getEntity().getContent()).readValueAs(OIDCClientRepresentation.class);
+            assertEquals(clientId, client.getClientId());
+            assertThat(client.getAuth().getSecret(), not(emptyOrNullString()));
+        }
+    }
+
+    @Test
+    public void clientSecretCanBeRegenerated() {
+
+    }
+
+    @Test
+    public void clientSecretGenerationInPatchRequest() throws IOException {
+        String clientId = "secret-generation-patch";
+
+        // create public client
+        HttpEntityEnclosingRequestBase request = new HttpPost(getClientsApiUrl());
+        setAuthHeader(request);
+        request.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
+        OIDCClientRepresentation.Auth createdAuth = getResultingAuthConfig(null, request, clientId);
+        assertThat(createdAuth, nullValue());
+
+        // patch to client secret authentication method and expect that client secret is generated
+        request = new HttpPatch(getClientsApiUrl() + "/" + clientId);
+        setAuthHeader(request);
+        request.setHeader(HttpHeaders.CONTENT_TYPE, AdminApi.CONTENT_TYPE_MERGE_PATCH);
+        OIDCClientRepresentation.Auth authWithoutSecret = new OIDCClientRepresentation.Auth();
+        authWithoutSecret.setMethod(ClientIdAndSecretAuthenticator.PROVIDER_ID);
+        authWithoutSecret.setSecret(null);
+        OIDCClientRepresentation.Auth patchedAuth = getResultingAuthConfig(authWithoutSecret, request, clientId);
+        assertThat(patchedAuth, notNullValue());
+        String newlyGeneratedSecret = patchedAuth.getSecret();
+        assertThat(newlyGeneratedSecret, not(emptyOrNullString()));
+
+        // if we don't specify any auth, we still should keep the generated secret - that is behavior of the API v1;
+        // however, it also means that using patch to turn confidential client into public is not possible
+        patchedAuth = getResultingAuthConfig(null, request, clientId);
+        assertThat(patchedAuth, notNullValue());
+        assertThat(patchedAuth.getMethod(), is(ClientIdAndSecretAuthenticator.PROVIDER_ID));
+        assertThat(patchedAuth.getSecret(), is(newlyGeneratedSecret));
+
+        // if we specify client-secret auth method without secret, we should keep the secret
+        // instead of regenerating the secret because there is a dedicated endpoint used to re-generated the secret
+        patchedAuth = getResultingAuthConfig(authWithoutSecret, request, clientId);
+        assertThat(patchedAuth, notNullValue());
+        assertThat(patchedAuth.getMethod(), is(ClientIdAndSecretAuthenticator.PROVIDER_ID));
+        assertThat(patchedAuth.getSecret(), is(newlyGeneratedSecret));
+
+        // but it is still possible to patch a new secret value explicitly
+        OIDCClientRepresentation.Auth authWithSecret = new OIDCClientRepresentation.Auth();
+        authWithSecret.setMethod(ClientIdAndSecretAuthenticator.PROVIDER_ID);
+        authWithSecret.setSecret("a-b-c-d-1-2-4-5");
+        patchedAuth = getResultingAuthConfig(authWithSecret, request, clientId);
+        assertThat(patchedAuth, notNullValue());
+        assertThat(patchedAuth.getMethod(), is(ClientIdAndSecretAuthenticator.PROVIDER_ID));
+        assertThat(patchedAuth.getSecret(), is(authWithSecret.getSecret()));
+    }
+
+    @Test
+    public void clientSecretGenerationInPutRequest() throws IOException {
+        // first create public client with PUT and then update it with client-secret method and expected generated secret
+        String clientId = "secret-generation-put-1";
+
+        // create public client
+        HttpEntityEnclosingRequestBase request = new HttpPut(getClientsApiUrl() + "/" + clientId);
+        setAuthHeader(request);
+        request.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
+        OIDCClientRepresentation.Auth putAuth = getResultingAuthConfig(null, request, clientId);
+        assertThat(putAuth, nullValue());
+
+        // now update it to confidential client with the client-secret method, but without any value,
+        // hence expect generated secret
+        OIDCClientRepresentation.Auth authWithoutSecret = new OIDCClientRepresentation.Auth();
+        authWithoutSecret.setMethod(ClientIdAndSecretAuthenticator.PROVIDER_ID);
+        authWithoutSecret.setSecret(null);
+        putAuth = getResultingAuthConfig(authWithoutSecret, request, clientId);
+        assertThat(putAuth, notNullValue());
+        assertThat(putAuth.getMethod(), is(ClientIdAndSecretAuthenticator.PROVIDER_ID));
+        assertThat(putAuth.getSecret(), not(emptyOrNullString()));
+
+        // now try to update secret with PUT method
+        OIDCClientRepresentation.Auth authWithSecret = new OIDCClientRepresentation.Auth();
+        authWithSecret.setMethod(ClientIdAndSecretAuthenticator.PROVIDER_ID);
+        authWithSecret.setSecret("z-y-x-w-v-9-8-7-6-5");
+        putAuth = getResultingAuthConfig(authWithSecret, request, clientId);
+        assertThat(putAuth, notNullValue());
+        assertThat(putAuth.getMethod(), is(authWithSecret.getMethod()));
+        assertThat(putAuth.getSecret(), is(authWithSecret.getSecret()));
+
+        // now try to update other fields, add the authentication configuration with the same method, hence expect
+        // that secret is still same; we don't want to "remove" the secret or regenerate it
+        putAuth = getResultingAuthConfig(authWithoutSecret, request, clientId);
+        assertThat(putAuth, notNullValue());
+        assertThat(putAuth.getMethod(), is(authWithSecret.getMethod()));
+        // expect the previous secret value is still there
+        assertThat(putAuth.getSecret(), is(authWithSecret.getSecret()));
+
+        // now try to update other fields, but do not specify the authentication configuration
+        // in which case we expect that original secret is still there
+        putAuth = getResultingAuthConfig(null, request, clientId);
+        assertThat(putAuth, notNullValue());
+        assertThat(putAuth.getMethod(), is(authWithSecret.getMethod()));
+        // expect the previous secret value is still there
+        assertThat(putAuth.getSecret(), is(authWithSecret.getSecret()));
+
+        // create confidential client directly with PUT and expect that the secret was generated
+        clientId = "secret-generation-put-2";
+        request = new HttpPut(getClientsApiUrl() + "/" + clientId);
+        setAuthHeader(request);
+        request.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
+        putAuth = getResultingAuthConfig(authWithoutSecret, request, clientId);
+        assertThat(putAuth, notNullValue());
+        assertThat(putAuth.getMethod(), is(ClientIdAndSecretAuthenticator.PROVIDER_ID));
+        assertThat(putAuth.getSecret(), not(emptyOrNullString()));
+    }
+
+    private OIDCClientRepresentation.Auth getResultingAuthConfig(OIDCClientRepresentation.Auth auth, HttpEntityEnclosingRequestBase request, String clientId) throws IOException {
+        setAuthHeader(request);
+
+        OIDCClientRepresentation rep = new OIDCClientRepresentation();
+        rep.setEnabled(true);
+        rep.setClientId(clientId);
+        rep.setDescription("I'm OIDC Client");
+        rep.setAuth(auth);
+
+        request.setEntity(new StringEntity(mapper.writeValueAsString(rep)));
+
+        try (var response = client.execute(request)) {
+            assertThat(response.getStatusLine().getStatusCode(), anyOf(is(201), is(200)));
+            OIDCClientRepresentation createdClient = mapper.createParser(response.getEntity().getContent()).readValueAs(OIDCClientRepresentation.class);
+            assertThat(createdClient.getEnabled(), is(rep.getEnabled()));
+            assertThat(createdClient.getClientId(), is(rep.getClientId()));
+            assertThat(createdClient.getDescription(), is(rep.getDescription()));
+
+            if (auth != null) {
+                assertThat(createdClient.getAuth(), notNullValue());
+                assertThat(createdClient.getAuth().getMethod(), is(auth.getMethod()));
+            }
+
+            return createdClient.getAuth();
         }
     }
 
