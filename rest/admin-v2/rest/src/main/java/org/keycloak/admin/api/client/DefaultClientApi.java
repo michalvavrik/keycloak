@@ -89,6 +89,7 @@ public class DefaultClientApi implements ClientApi {
 
             final ObjectReader objectReader = objectMapper.readerForUpdating(client);
             BaseClientRepresentation updated = objectReader.readValue(patch);
+            updated.updateFieldsOnMerge(client);
 
             validateUnknownFields(updated);
             return clientService.createOrUpdate(realm, updated, true).representation();
