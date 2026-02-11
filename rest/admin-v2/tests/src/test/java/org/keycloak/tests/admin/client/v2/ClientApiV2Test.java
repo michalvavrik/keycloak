@@ -55,6 +55,10 @@ import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import static org.hamcrest.Matchers.instanceOf;
+
+import static org.hamcrest.Matchers.nullValue;
+
 import static org.keycloak.services.cors.Cors.ACCESS_CONTROL_ALLOW_METHODS;
 import static org.keycloak.services.cors.Cors.ORIGIN_HEADER;
 
@@ -251,6 +255,12 @@ public class ClientApiV2Test {
 
         try (var response = client.execute(oidcRequest)) {
             assertEquals(201, response.getStatusLine().getStatusCode());
+
+            // this is public client, therefore verify that client secret was not generated
+            BaseClientRepresentation representation = mapper.readValue(response.getEntity().getContent(), BaseClientRepresentation.class);
+            assertThat(representation, instanceOf(OIDCClientRepresentation.class));
+            OIDCClientRepresentation oidcClientRepresentation = (OIDCClientRepresentation) representation;
+            assertThat(oidcClientRepresentation.getAuth(), nullValue());
         }
 
         // Create a SAML client with SAML-specific fields
@@ -625,6 +635,31 @@ public class ClientApiV2Test {
             assertThat(header, notNullValue());
             assertThat(header.getValue(), is("DELETE, POST, GET, PUT"));
         }
+    }
+
+    @Test
+    public void secretGeneratedForOidcClientIfMissing() {
+
+    }
+
+    @Test
+    public void secretRegeneratedOnDemand() {
+
+    }
+
+    @Test
+    public void secretCanBePatched() {
+
+    }
+
+    @Test
+    public void generatedSecretIsUpdatedOnlyIfRequired() {
+
+    }
+
+    @Test
+    public void secretNotGeneratedForPublicClient() {
+
     }
 
     private OIDCClientRepresentation getTestingFullClientRep() {
