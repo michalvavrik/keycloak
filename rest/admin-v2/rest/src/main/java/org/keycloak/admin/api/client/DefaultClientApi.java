@@ -14,6 +14,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import org.keycloak.admin.api.AdminApi;
+import org.keycloak.authentication.authenticators.client.ClientIdAndSecretAuthenticator;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
@@ -108,6 +109,21 @@ public class DefaultClientApi implements ClientApi {
             throw new NotFoundException("Cannot find the specified client");
         }
         clientResource.deleteClient();
+    }
+
+    @Override
+    public String generateSecret() {
+        if (clientResource == null) {
+            throw new NotFoundException("Cannot find the specified client");
+        }
+        var client = clientResource.getClient();
+        if (client.isPublicClient()) {
+            throw new WebApplicationException("Secret generation is not supported for public clients", Response.Status.BAD_REQUEST);
+        }
+        if (!ClientIdAndSecretAuthenticator.PROVIDER_ID.equals(client.getClientAuthenticatorType())) {
+            throw new WebApplicationException("Secret generation is only supported for authentication method '%s', but got '%s'".formatted(ClientIdAndSecretAuthenticator.PROVIDER_ID, client.getClientAuthenticatorType()), Response.Status.BAD_REQUEST);
+        }
+        return clientResource.regenerateSecret().getValue();
     }
 
     static void validateUnknownFields(BaseClientRepresentation rep) {
