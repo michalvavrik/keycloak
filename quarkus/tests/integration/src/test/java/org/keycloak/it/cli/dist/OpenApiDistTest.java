@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import static io.restassured.RestAssured.given;
 import static io.restassured.RestAssured.when;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DistributionTest(keepAlive = true, requestPort = 9000, containerExposedPorts = {8080, 9000})
@@ -106,6 +107,21 @@ public class OpenApiDistTest {
       response
           .body("components.schemas.OIDCClientRepresentation.properties.protocol.type", equalTo("string")) // the generated discriminator field
           .body("paths.'/admin/api/{realmName}/clients/{version}'.get.responses.'200'.content.'application/json'.schema.type", equalTo("array"));
+
+      assertGenerateSecretEndpointPath(response);
+    }
+
+    private void assertGenerateSecretEndpointPath(ValidatableResponse response) {
+        String generateSecretPath = "paths.'/admin/api/{realmName}/clients/{version}/{id}/generate-secret'";
+
+        response
+            .body(generateSecretPath, notNullValue())
+            .body(generateSecretPath + ".post", notNullValue())
+            .body(generateSecretPath + ".post.summary", equalTo("Generates a new client secret"))
+            .body(generateSecretPath + ".post.responses.'200'", notNullValue())
+            .body(generateSecretPath + ".post.responses.'400'", notNullValue())
+            .body(generateSecretPath + ".post.responses.'403'", notNullValue())
+            .body(generateSecretPath + ".post.responses.'404'", notNullValue());
     }
 
     private void assertOpenAPISpecPolymorphicPaths(ValidatableResponse response, String schemaPath) {

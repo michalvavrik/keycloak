@@ -5,7 +5,9 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -13,6 +15,9 @@ import jakarta.ws.rs.core.Response;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 
 import static org.keycloak.admin.api.AdminApi.CONTENT_TYPE_MERGE_PATCH;
 
@@ -40,4 +45,15 @@ public interface ClientApi {
     @Produces(MediaType.APPLICATION_JSON)
     void deleteClient();
 
+    @Path("generate-secret")
+    @POST
+    @Produces(MediaType.TEXT_PLAIN)
+    @Operation(summary = "Generates a new client secret", description = "Generates a new client secret for clients using client-secret authentication method. Updates the client with this new secret and returns it.")
+    @APIResponses(value = {
+        @APIResponse(responseCode = "200", description = "Success - returns the newly generated secret"),
+        @APIResponse(responseCode = "400", description = "Bad Request - client authentication method is not 'client-secret'"),
+        @APIResponse(responseCode = "403", description = "Forbidden"),
+        @APIResponse(responseCode = "404", description = "Not Found - client does not exist")
+    })
+    String generateSecret();
 }
