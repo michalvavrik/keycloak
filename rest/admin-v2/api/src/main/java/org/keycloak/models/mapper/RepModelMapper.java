@@ -1,5 +1,7 @@
 package org.keycloak.models.mapper;
 
+import org.keycloak.representations.idm.ClientRepresentation;
+
 /**
  * @author Vaclav Muzikar <vmuzikar@redhat.com>
  */
@@ -11,4 +13,6 @@ public interface RepModelMapper <T, U> {
     }
 
     U toModel(T rep, U existingModel);
+
+    ClientRepresentation createOldClientRepresentation(T rep);
 }
