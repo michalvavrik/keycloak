@@ -1029,7 +1029,7 @@ class KeycloakProcessor {
                         }
                     }
                 }
-            } catch (IOException | URISyntaxException e) {
+            } catch (IOException e) {
                 throw new RuntimeException("Failed to discover script providers", e);
             }
         }
@@ -1069,8 +1069,8 @@ class KeycloakProcessor {
         return descriptors;
     }
 
-    private List<ScriptProviderDescriptor> getScriptProviderDescriptorsFromJarFile(URL url) throws IOException, URISyntaxException {
-        String file = url.toURI().getSchemeSpecificPart();
+    private List<ScriptProviderDescriptor> getScriptProviderDescriptorsFromJarFile(URL url) throws IOException {
+        String file = url.getFile();
 
         if (!file.contains(JAR_FILE_SEPARATOR)) {
             return List.of();
@@ -1080,10 +1080,6 @@ class KeycloakProcessor {
 
         try (JarFile jarFile = new JarFile(file.substring("file:".length(), file.indexOf(JAR_FILE_SEPARATOR)))) {
             JarEntry descriptorEntry = jarFile.getJarEntry(KEYCLOAK_SCRIPTS_JSON_PATH);
-
-            if (descriptorEntry == null) {
-                return descriptors;
-            }
 
             try (InputStream is = jarFile.getInputStream(descriptorEntry)) {
                 ScriptProviderDescriptor descriptor = JsonSerialization.readValue(is, ScriptProviderDescriptor.class);
