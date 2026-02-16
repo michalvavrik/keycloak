@@ -1,7 +1,13 @@
 == Preface
 
+=== Container Images
+
+The official {project_name} container images for both the server and the operator use OpenJDK {jdk_version_recommended} as the Java runtime environment.
+
+=== Example Listings
+
 In some of the example listings, what is meant to be displayed on one line does not fit inside the available page width. These lines have been broken up. A '\' at the end of a line means that a break has been introduced to fit in the page, with the following lines indented.
-So: 
+So:
 
 [source]
 ----
@@ -9,12 +15,12 @@ Let's pretend to have an extremely \
   long line that \
   does not fit
 This one is short
-----         
-Is really: 
+----
+Is really:
 
 [source]
 ----
 Let's pretend to have an extremely long line that does not fit
 This one is short
-----      
+----
 
