@@ -12,7 +12,7 @@ The Federal Information Processing Standard Publication 140-2, (FIPS 140-2), is 
 To run in FIPS 140-2, {project_name} should run on a FIPS 140-2 enabled system. This requirement usually assumes RHEL or Fedora where FIPS was enabled during installation.
 See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html-single/security_hardening/index#assembly_installing-the-system-in-fips-mode_security-hardening[RHEL documentation]
 for the details. When the system is in FIPS mode, it makes sure that the underlying OpenJDK is in FIPS mode as well and would use only
-https://access.redhat.com/documentation/en-us/openjdk/17/html/configuring_openjdk_17_on_rhel_with_fips/openjdk-default-fips-configuration[FIPS enabled security providers].
+https://docs.redhat.com/en/documentation/red_hat_build_of_openjdk/21/html/configuring_red_hat_build_of_openjdk_21_on_rhel_with_fips/openjdk-default-fips-configuration#security_providers[FIPS enabled security providers].
 
 To check that the system is in FIPS mode, you can check it with the following command from the command line:
 
@@ -53,7 +53,7 @@ You can create either `pkcs12` or `bcfks` keystore to be used for the {project_n
 
 The `p12` (or `pkcs12`) keystore (and/or truststore) works well in BCFIPS non-approved mode.
 
-PKCS12 keystore can be generated with OpenJDK 21 Java on RHEL 9 in the standard way. For instance, the following command can be used to generate the keystore:
+PKCS12 keystore can be generated with OpenJDK on RHEL 9 in the standard way. For instance, the following command can be used to generate the keystore:
 
 [source,bash]
 ----
@@ -159,8 +159,8 @@ always fulfils this requirement.
 == Other restrictions
 
 To have SAML working, make sure that a `XMLDSig` security provider is available in your security providers.
-To have Kerberos working, make sure that a `SunJGSS` security provider is available. In FIPS enabled RHEL 9 in OpenJDK 21, the `XMLDSig` security provider may be already enabled
-in the `java.security` by default and the same applies with latest OpenJDK 17. But with older OpenJDK 17, it may not be enabled by default, which means that SAML effectively cannot work.
+To have Kerberos working, make sure that a `SunJGSS` security provider is available. In FIPS enabled RHEL 9 in OpenJDK 21 or later, the `XMLDSig` security provider may be already enabled
+in the `java.security` by default and the same applies with recent OpenJDK 17 versions. But with older OpenJDK 17, it may not be enabled by default, which means that SAML effectively cannot work.
 
 To have SAML working, you can manually add the provider into `JAVA_HOME/conf/security/java.security` into the list fips providers. For example, add the line such as the following in case
 that it is not already available in your FIPS security providers:
@@ -170,7 +170,7 @@ that it is not already available in your FIPS security providers:
 fips.provider.7=XMLDSig
 ----
 
-Adding this security provider should work well. In fact, it is FIPS compliant and is already added by default in the OpenJDK 21 and newer versions of OpenJDK 17.
+Adding this security provider should work well. In fact, it is FIPS compliant and is already included by default in recent versions of OpenJDK 17, and in OpenJDK 21 or later.
 Details are in the https://bugzilla.redhat.com/show_bug.cgi?id=1940064[bugzilla].
 
 NOTE: It is recommended to look at `JAVA_HOME/conf/security/java.security` and check all configured providers here and make sure that the number matches. In other words, `fips.provider.7`
@@ -228,7 +228,7 @@ For example in the current directory, you can create sub-directory `files` and a
 
 * BC FIPS jar files as described above
 * Custom keystore file - named for example `keycloak-fips.keystore.bcfks`
-* Security file `kc.java.security` with added provider for SAML (Not needed with OpenJDK 21 or newer OpenJDK 17)
+* Security file `kc.java.security` with added provider for SAML (Not needed with OpenJDK 21 or later, and recent OpenJDK 17 versions)
 
 Then create `Containerfile` in the current directory similar to this:
 
