@@ -7,8 +7,11 @@ import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 @JsonInclude(JsonInclude.Include.NON_ABSENT)
+// TODO: Remove @Schema once https://github.com/keycloak/keycloak/pull/46180 is merged
+@Schema
 public class BaseRepresentation {
 
     @JsonIgnore
