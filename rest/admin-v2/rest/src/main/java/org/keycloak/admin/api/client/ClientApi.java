@@ -14,6 +14,9 @@ import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 import org.keycloak.services.PatchTypeNames;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 
 public interface ClientApi {
 
@@ -32,6 +35,12 @@ public interface ClientApi {
     @PATCH
     @Consumes(PatchTypeNames.JSON_MERGE)
     @Produces(MediaType.APPLICATION_JSON)
+    @RequestBody(
+        content = @Content(
+            mediaType = PatchTypeNames.JSON_MERGE,
+            schema = @Schema(implementation = BaseClientRepresentation.class)
+        )
+    )
     BaseClientRepresentation patchClient(JsonNode patch);
 
     // TODO marked as producing json, but does not return anything

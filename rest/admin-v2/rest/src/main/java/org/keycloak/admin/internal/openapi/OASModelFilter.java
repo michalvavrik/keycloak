@@ -1,4 +1,5 @@
-package org.keycloak.quarkus.runtime.oas;
+package org.keycloak.admin.internal.openapi;
+
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -12,7 +13,6 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import io.quarkus.smallrye.openapi.OpenApiFilter;
 import org.eclipse.microprofile.openapi.OASFactory;
 import org.eclipse.microprofile.openapi.OASFilter;
 import org.eclipse.microprofile.openapi.models.OpenAPI;
@@ -25,17 +25,14 @@ import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 
-@OpenApiFilter(OpenApiFilter.RunStage.BUILD)
 public class OASModelFilter implements OASFilter {
 
-    private final IndexView index;
     private final Logger log = Logger.getLogger(OASModelFilter.class);
     private final Map<String, ClassInfo> simpleNameToClassInfoMap = new HashMap<>();
 
     public static final String REF_PREFIX = "#/components/schemas/";
 
     public OASModelFilter(IndexView indexView) {
-        this.index = indexView;
         log.debug("Index size: " + indexView.getKnownClasses().size());
 
         indexView.getKnownClasses().forEach(classInfo -> {
