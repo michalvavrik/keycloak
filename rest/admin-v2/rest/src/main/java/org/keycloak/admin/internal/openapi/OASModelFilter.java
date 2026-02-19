@@ -1,4 +1,5 @@
-package org.keycloak.quarkus.runtime.oas;
+package org.keycloak.admin.internal.openapi;
+
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -10,7 +11,6 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import io.quarkus.smallrye.openapi.OpenApiFilter;
 import org.eclipse.microprofile.openapi.OASFactory;
 import org.eclipse.microprofile.openapi.OASFilter;
 import org.eclipse.microprofile.openapi.models.OpenAPI;
@@ -26,7 +26,7 @@ import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 
-@OpenApiFilter(OpenApiFilter.RunStage.BUILD)
+//@OpenApiFilter(OpenApiFilter.RunStage.BUILD) FIXME: do we need this?
 public class OASModelFilter implements OASFilter {
 
     private final IndexView index;
@@ -46,6 +46,19 @@ public class OASModelFilter implements OASFilter {
 
     @Override
     public void filterOpenAPI(OpenAPI openAPI) {
+        // Fix BaseRepresentation schema: add id property and additionalProperties
+        Schema baseRepresentation = openAPI.getComponents().getSchemas().get("BaseRepresentation");
+        if (baseRepresentation != null) {
+            Schema idSchema = OASFactory.createSchema();
+            idSchema.addType(Schema.SchemaType.STRING);
+            idSchema.setDescription("Resource identifier");
+            baseRepresentation.addProperty("id", idSchema);
+
+            Schema additionalPropsSchema = OASFactory.createSchema();
+            additionalPropsSchema.addType(Schema.SchemaType.OBJECT);
+            baseRepresentation.setAdditionalPropertiesSchema(additionalPropsSchema);
+        }
+
         // Sort Paths
         Map<String, PathItem> newPaths = openAPI.getPaths().getPathItems().entrySet().stream()
                 .collect(Collectors.toMap(

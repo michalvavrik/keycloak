@@ -1,3 +1,5 @@
 lib/
 generated/
 .kiota/
+# Generated from rest/admin-v2/rest during build
+target/

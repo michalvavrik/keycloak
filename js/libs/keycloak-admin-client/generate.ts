@@ -50,6 +50,10 @@ async function main() {
     openApiFilePath = resolve(projectRoot, OPENAPI_FILE);
     if (!existsSync(openApiFilePath)) {
       console.error(`❌ OpenAPI file not found: ${openApiFilePath}`);
+      console.error(
+        `The file is generated from 'rest/admin-v2/rest' during Maven build.`,
+      );
+      console.error(`Run: mvn clean install -pl rest/admin-v2/rest -am`);
       process.exit(1);
     }
     console.log(`📄 Using local OpenAPI file: ${openApiFilePath}`);
