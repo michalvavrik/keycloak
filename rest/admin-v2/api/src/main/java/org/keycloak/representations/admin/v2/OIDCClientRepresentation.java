@@ -7,6 +7,9 @@ import java.util.Set;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
+import org.keycloak.representations.admin.v2.validation.ClientSecretNotBlank;
+import org.keycloak.representations.admin.v2.validation.PutClient;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
@@ -84,6 +87,7 @@ public class OIDCClientRepresentation extends BaseClientRepresentation {
         return PROTOCOL;
     }
 
+    @ClientSecretNotBlank(groups = PutClient.class)
     public static class Auth extends BaseRepresentation {
 
         @JsonPropertyDescription("Which authentication method is used for this client")

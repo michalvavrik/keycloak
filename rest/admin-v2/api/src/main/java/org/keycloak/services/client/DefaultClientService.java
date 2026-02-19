@@ -18,12 +18,13 @@ import org.keycloak.models.ClientModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
+import org.keycloak.models.mapper.BaseClientModelMapper;
 import org.keycloak.models.mapper.ClientModelMapper;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 import org.keycloak.representations.admin.v2.OIDCClientRepresentation;
 import org.keycloak.representations.admin.v2.validation.CreateClientDefault;
-import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.admin.v2.validation.PutClient;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.services.PatchType;
 import org.keycloak.services.ServiceException;
@@ -42,6 +43,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import org.apache.http.HttpEntity;
 import org.apache.http.util.EntityUtils;
+
+import static org.keycloak.services.client.ClientService.ModificationType.CREATE_OR_UPDATE;
+import static org.keycloak.services.client.ClientService.ModificationType.PATCH;
 
 // TODO
 public class DefaultClientService implements ClientService {
@@ -101,7 +105,7 @@ public class DefaultClientService implements ClientService {
     }
 
     @Override
-    public CreateOrUpdateResult createOrUpdate(RealmModel realm, BaseClientRepresentation client, boolean allowUpdate) throws ServiceException {
+    public CreateOrUpdateResult createOrUpdate(RealmModel realm, BaseClientRepresentation client, ModificationType modificationType) throws ServiceException {
         validateUnknownFields(client);
 
         boolean created = false;
@@ -113,8 +117,11 @@ public class DefaultClientService implements ClientService {
         }
 
         if (clientResource != null) {
-            if (!allowUpdate) {
+            if (!modificationType.allowUpdate) {
                 throw new ServiceException("Client already exists", Response.Status.CONFLICT);
+            }
+            if (modificationType == CREATE_OR_UPDATE) {
+                validator.validate(client, PutClient.class);
             }
             model = mapper.toModel(client, clientResource.viewClientModel());
             var rep = ModelToRepresentation.toRepresentation(model, session);
@@ -125,13 +132,18 @@ public class DefaultClientService implements ClientService {
             }
         } else {
             created = true;
-            validator.validate(client, CreateClientDefault.class); // TODO improve it to avoid second validation when we know it is create and not update
+
+            // TODO improve it to avoid second validation when we know it is create and not update
+            if (modificationType == CREATE_OR_UPDATE) {
+                validator.validate(client, CreateClientDefault.class, PutClient.class);
+            } else {
+                validator.validate(client, CreateClientDefault.class);
+            }
 
             // First, create a basic v1 representation to persist the client in the database.
             // We can't use mapper.toModel(client) directly for creation because the "detached model"
-            var basicRep = new ClientRepresentation();
-            basicRep.setClientId(client.getClientId());
-            basicRep.setProtocol(client.getProtocol());
+            // TODO: avoid casting of the ClientModelMapper to BaseClientModelMapper
+            var basicRep = ((BaseClientModelMapper<?>) mapper).createOldClientRepresentation(client);
 
             // Create the client in the database
             model = clientsResource.createClientModel(basicRep);
@@ -179,7 +191,7 @@ public class DefaultClientService implements ClientService {
             default -> throw new ServiceException("Invalid patch type", Response.Status.UNSUPPORTED_MEDIA_TYPE);
         }
 
-        return createOrUpdate(realm, updated, true).representation();
+        return createOrUpdate(realm, updated, PATCH).representation();
     }
 
     @Override
