@@ -50,6 +50,8 @@ async function main() {
     openApiFilePath = resolve(projectRoot, OPENAPI_FILE);
     if (!existsSync(openApiFilePath)) {
       console.error(`❌ OpenAPI file not found: ${openApiFilePath}`);
+      console.error(`The file is generated from 'rest/admin-v2/rest' during Maven build.`);
+      console.error(`Run from Keycloak project root: mvn clean install -am -pl rest/admin-v2/rest -DskipTests -DskipITs`);
       process.exit(1);
     }
     console.log(`📄 Using local OpenAPI file: ${openApiFilePath}`);
