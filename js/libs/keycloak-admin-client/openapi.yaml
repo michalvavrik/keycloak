@@ -11,17 +11,10 @@ components:
           type: string
         certificate:
           type: string
-    BaseRepresentation:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Resource identifier
-      additionalProperties: true
     BaseClientRepresentation:
+      description: Base client representation with common properties for all client
+        types
       type: object
-      allOf:
-      - $ref: "#/components/schemas/BaseRepresentation"
       properties:
         clientId:
           type: string
@@ -43,9 +36,15 @@ components:
           uniqueItems: true
           items:
             type: string
-        additionalFields:
-          type: object
-          additionalProperties: {}
+        protocol:
+          type: string
+      discriminator:
+        propertyName: protocol
+        mapping:
+          openid-connect: "#/components/schemas/OIDCClientRepresentation"
+          saml: "#/components/schemas/SAMLClientRepresentation"
+      required:
+      - protocol
     Flow:
       type: string
       enum:
@@ -58,8 +57,6 @@ components:
       - CIBA
     OIDCClientRepresentation:
       type: object
-      allOf:
-      - $ref: "#/components/schemas/BaseClientRepresentation"
       properties:
         loginFlows:
           type: array
@@ -80,11 +77,13 @@ components:
             type: string
         protocol:
           type: string
-    SAMLClientRepresentation:
-      type: object
-      description: SAML Client configuration
       allOf:
       - $ref: "#/components/schemas/BaseClientRepresentation"
+      required:
+      - protocol
+    SAMLClientRepresentation:
+      description: SAML Client configuration
+      type: object
       properties:
         nameIdFormat:
           type: string
@@ -112,6 +111,10 @@ components:
           type: boolean
         protocol:
           type: string
+      allOf:
+      - $ref: "#/components/schemas/BaseClientRepresentation"
+      required:
+      - protocol
 tags:
 - name: Clients (v2)
   x-smallrye-profile-admin: ""
@@ -131,14 +134,7 @@ paths:
               schema:
                 type: array
                 items:
-                  oneOf:
-                  - $ref: "#/components/schemas/OIDCClientRepresentation"
-                  - $ref: "#/components/schemas/SAMLClientRepresentation"
-                  discriminator:
-                    propertyName: protocol
-                    mapping:
-                      openid-connect: "#/components/schemas/OIDCClientRepresentation"
-                      saml: "#/components/schemas/SAMLClientRepresentation"
+                  $ref: "#/components/schemas/BaseClientRepresentation"
     post:
       summary: Create a new client
       description: Creates a new client in the realm
@@ -149,14 +145,7 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-              - $ref: "#/components/schemas/OIDCClientRepresentation"
-              - $ref: "#/components/schemas/SAMLClientRepresentation"
-              discriminator:
-                propertyName: protocol
-                mapping:
-                  openid-connect: "#/components/schemas/OIDCClientRepresentation"
-                  saml: "#/components/schemas/SAMLClientRepresentation"
+              $ref: "#/components/schemas/BaseClientRepresentation"
         required: true
       responses:
         "200":
@@ -187,14 +176,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
-                - $ref: "#/components/schemas/OIDCClientRepresentation"
-                - $ref: "#/components/schemas/SAMLClientRepresentation"
-                discriminator:
-                  propertyName: protocol
-                  mapping:
-                    openid-connect: "#/components/schemas/OIDCClientRepresentation"
-                    saml: "#/components/schemas/SAMLClientRepresentation"
+                $ref: "#/components/schemas/BaseClientRepresentation"
     put:
       operationId: createOrUpdateClient
       tags:
@@ -203,14 +185,7 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-              - $ref: "#/components/schemas/OIDCClientRepresentation"
-              - $ref: "#/components/schemas/SAMLClientRepresentation"
-              discriminator:
-                propertyName: protocol
-                mapping:
-                  openid-connect: "#/components/schemas/OIDCClientRepresentation"
-                  saml: "#/components/schemas/SAMLClientRepresentation"
+              $ref: "#/components/schemas/BaseClientRepresentation"
         required: true
       responses:
         "200":
@@ -224,7 +199,9 @@ paths:
       - Clients (v2)
       requestBody:
         content:
-          application/merge-patch+json: {}
+          application/merge-patch+json:
+            schema:
+              type: array
         required: true
       responses:
         "200":
@@ -232,14 +209,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
-                - $ref: "#/components/schemas/OIDCClientRepresentation"
-                - $ref: "#/components/schemas/SAMLClientRepresentation"
-                discriminator:
-                  propertyName: protocol
-                  mapping:
-                    openid-connect: "#/components/schemas/OIDCClientRepresentation"
-                    saml: "#/components/schemas/SAMLClientRepresentation"
+                $ref: "#/components/schemas/BaseClientRepresentation"
     delete:
       operationId: deleteClient
       tags:
