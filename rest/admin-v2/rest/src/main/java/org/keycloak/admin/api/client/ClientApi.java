@@ -10,6 +10,10 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
+
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,6 +37,12 @@ public interface ClientApi {
     @PATCH
     @Consumes(CONTENT_TYPE_MERGE_PATCH)
     @Produces(MediaType.APPLICATION_JSON)
+    @RequestBody(
+        content = @Content(
+            mediaType = CONTENT_TYPE_MERGE_PATCH,
+            schema = @Schema(implementation = BaseClientRepresentation.class)
+        )
+    )
     BaseClientRepresentation patchClient(JsonNode patch);
 
     // TODO marked as producing json, but does not return anything
