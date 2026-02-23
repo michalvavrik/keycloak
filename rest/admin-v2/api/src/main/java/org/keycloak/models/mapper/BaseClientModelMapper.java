@@ -8,6 +8,7 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
+import org.keycloak.representations.idm.ClientRepresentation;
 
 /**
  * @author Vaclav Muzikar <vmuzikar@redhat.com>
@@ -75,5 +76,23 @@ public abstract class BaseClientModelMapper<T extends BaseClientRepresentation> 
 
     @Override
     public void close() {
+    }
+
+    @SuppressWarnings("unchecked")
+    public ClientRepresentation createOldClientRepresentation(BaseClientRepresentation client) {
+        var basicRep = new ClientRepresentation();
+        basicRep.setClientId(client.getClientId());
+        basicRep.setProtocol(client.getProtocol());
+        updateOldClientRepresentation((T) client, basicRep);
+        return basicRep;
+    }
+
+    /**
+     * Allows to populate the old client representation with some values.
+     * This should be kept to minimum as we only want to maintain relationship between
+     * the model and the new representation.
+     */
+    protected void updateOldClientRepresentation(T client, ClientRepresentation oldRepresentation) {
+        // implemented by subclasses when needed
     }
 }

@@ -26,6 +26,8 @@ import org.keycloak.services.resources.admin.fgap.AdminPermissionEvaluator;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import static org.keycloak.services.client.ClientService.ModificationType.CREATE_OR_UPDATE;
+
 
 public class DefaultClientApi implements ClientApi {
     private final KeycloakSession session;
@@ -61,7 +63,7 @@ public class DefaultClientApi implements ClientApi {
         if (!Objects.equals(clientId, client.getClientId())) {
             throw new WebApplicationException("clientId in payload does not match the clientId in the path", Response.Status.BAD_REQUEST);
         }
-        var result = clientService.createOrUpdate(realm, client, true);
+        var result = clientService.createOrUpdate(realm, client, CREATE_OR_UPDATE);
         return Response.status(result.created() ? Response.Status.CREATED : Response.Status.OK).entity(result.representation()).build();
     }
 

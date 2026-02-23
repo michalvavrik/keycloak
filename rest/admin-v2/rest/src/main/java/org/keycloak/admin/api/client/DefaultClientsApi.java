@@ -24,6 +24,8 @@ import org.keycloak.services.resources.admin.fgap.AdminPermissionEvaluator;
 import org.keycloak.validation.jakarta.HibernateValidatorProvider;
 import org.keycloak.validation.jakarta.JakartaValidatorProvider;
 
+import static org.keycloak.services.client.ClientService.ModificationType.CREATE;
+
 public class DefaultClientsApi implements ClientsApi {
     private final KeycloakSession session;
     private final AdminPermissionEvaluator permissions;
@@ -59,7 +61,7 @@ public class DefaultClientsApi implements ClientsApi {
     public Response createClient(@Valid BaseClientRepresentation client) {
         validator.validate(client, CreateClientDefault.class);
         return Response.status(Response.Status.CREATED)
-                .entity(clientService.createOrUpdate(realm, client, false).representation())
+                .entity(clientService.createOrUpdate(realm, client, CREATE).representation())
                 .build();
     }
 

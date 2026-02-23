@@ -9,6 +9,10 @@ import org.keycloak.models.ClientModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RoleModel;
 import org.keycloak.representations.admin.v2.OIDCClientRepresentation;
+import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.utils.StringUtil;
+
+import static org.keycloak.representations.admin.v2.validation.ClientSecretNotBlankValidator.isClientSecret;
 
 /**
  * @author Vaclav Muzikar <vmuzikar@redhat.com>
@@ -44,7 +48,12 @@ public class OIDCClientModelMapper extends BaseClientModelMapper<OIDCClientRepre
         if (rep.getAuth() != null) {
             model.setPublicClient(false);
             model.setClientAuthenticatorType(rep.getAuth().getMethod());
-            model.setSecret(rep.getAuth().getSecret());
+
+            // deals with situation when the client secret was generated
+            boolean canSetSecret = StringUtil.isNotBlank(rep.getAuth().getSecret()) || !isClientSecret(rep.getAuth().getMethod());
+            if (canSetSecret) {
+                model.setSecret(rep.getAuth().getSecret());
+            }
         } else {
             model.setPublicClient(true);
         }
@@ -91,4 +100,16 @@ public class OIDCClientModelMapper extends BaseClientModelMapper<OIDCClientRepre
         }
         return Collections.emptySet();
     }
+
+    @Override
+    protected void updateOldClientRepresentation(OIDCClientRepresentation client, ClientRepresentation oldRepresentation) {
+        var auth = client.getAuth();
+        if (auth != null && isClientSecret(auth.getMethod())) {
+            // this makes sure that client secret is generated for "create" methods if necessary
+            oldRepresentation.setPublicClient(false);
+            oldRepresentation.setClientAuthenticatorType(auth.getMethod());
+            oldRepresentation.setSecret(auth.getSecret());
+        }
+    }
+
 }
