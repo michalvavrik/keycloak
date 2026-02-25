@@ -146,12 +146,14 @@ jobs:
 
           if grep -qi "sorry" /tmp/keycloak-logs.txt && grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
             echo "✅ SUCCESS: Acquisition timeout reproduced as expected!"
-            grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" | head -5
+            grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" | head -5 || true
+            echo -e "\n=== Full pod logs ==="
+            cat /tmp/keycloak-logs.txt
             exit 0
           else
             echo "❌ FAILURE: Expected acquisition timeout not found!"
             echo "Full logs:"
-            tail -100 /tmp/keycloak-logs.txt
+            cat /tmp/keycloak-logs.txt
             exit 1
           fi
 
@@ -273,20 +275,31 @@ jobs:
           echo "=== Pod Status ==="
           kubectl get pods -l app=keycloak
 
-          echo -e "\n=== Checking for successful startup ==="
-          if kubectl logs test-old-version-0 2>&1 | grep -q "Keycloak.*started in"; then
+          echo -e "\n=== Saving logs to file and checking for successful startup ==="
+          kubectl logs test-old-version-0 2>&1 > /tmp/keycloak-logs.txt
+
+          if grep -q "Keycloak.*started in" /tmp/keycloak-logs.txt; then
             echo "✅ SUCCESS: Keycloak 26.0.0 started successfully with poolMaxSize=3!"
-            kubectl logs test-old-version-0 2>&1 | grep "Keycloak.*started in"
+            grep "Keycloak.*started in" /tmp/keycloak-logs.txt
 
             # Verify it's using kubernetes stack (not jdbc-ping)
-            if kubectl logs test-old-version-0 2>&1 | grep -q "stack \`kubernetes\`"; then
+            if grep -q "stack \`kubernetes\`" /tmp/keycloak-logs.txt; then
               echo "✅ Confirmed: Using kubernetes stack (DNS_PING), not jdbc-ping"
             fi
+
+            # Verify NO acquisition timeout
+            if grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
+              echo "❌ WARNING: Found acquisition timeout in logs!"
+              grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" || true
+            fi
+
+            echo -e "\n=== Full pod logs ==="
+            cat /tmp/keycloak-logs.txt
             exit 0
           else
             echo "❌ FAILURE: Keycloak did not start successfully!"
             echo "Full logs:"
-            kubectl logs test-old-version-0 2>&1 | tail -50
+            cat /tmp/keycloak-logs.txt
             exit 1
           fi
 
@@ -416,12 +429,14 @@ jobs:
           if grep -qi "sorry" /tmp/keycloak-logs.txt && grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
             echo "✅ SUCCESS: Confirmed that additionalOptions workaround does NOT fix the issue!"
             echo "The spec.db.poolMaxSize takes precedence over additionalOptions"
-            grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" | head -5
+            grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" | head -5 || true
+            echo -e "\n=== Full pod logs ==="
+            cat /tmp/keycloak-logs.txt
             exit 0
           else
             echo "❌ UNEXPECTED: additionalOptions workaround appears to have worked!"
             echo "This contradicts the expected behavior. Full logs:"
-            tail -100 /tmp/keycloak-logs.txt
+            cat /tmp/keycloak-logs.txt
             exit 1
           fi
 
@@ -543,14 +558,19 @@ jobs:
           echo "=== Pod Status ==="
           kubectl get pods -l app=keycloak
 
-          echo -e "\n=== Verifying successful startup ==="
-          if kubectl logs test-fixed-0 2>&1 | grep -q "Keycloak.*started in"; then
+          echo -e "\n=== Saving logs to file and verifying successful startup ==="
+          kubectl logs test-fixed-0 2>&1 > /tmp/keycloak-logs.txt
+
+          if grep -q "Keycloak.*started in" /tmp/keycloak-logs.txt; then
             echo "✅ SUCCESS: Keycloak started successfully with poolMaxSize=20!"
-            kubectl logs test-fixed-0 2>&1 | grep "Keycloak.*started in"
+            grep "Keycloak.*started in" /tmp/keycloak-logs.txt
 
             # Verify no acquisition timeouts
-            if kubectl logs test-fixed-0 2>&1 | grep -q "acquisition timeout"; then
+            if grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
               echo "❌ FAILURE: Still seeing acquisition timeouts!"
+              grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" || true
+              echo -e "\n=== Full pod logs ==="
+              cat /tmp/keycloak-logs.txt
               exit 1
             fi
 
@@ -558,11 +578,14 @@ jobs:
             if kubectl get pod test-fixed-0 -o jsonpath='{.status.containerStatuses[0].ready}' | grep -q "true"; then
               echo "✅ Pod is ready and running"
             fi
+
+            echo -e "\n=== Full pod logs ==="
+            cat /tmp/keycloak-logs.txt
             exit 0
           else
             echo "❌ FAILURE: Keycloak did not start successfully!"
             echo "Full logs:"
-            kubectl logs test-fixed-0 2>&1 | tail -100
+            cat /tmp/keycloak-logs.txt
             exit 1
           fi
 
