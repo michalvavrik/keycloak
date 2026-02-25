@@ -748,3 +748,148 @@ jobs:
             cat /tmp/keycloak-logs.txt
             exit 1
           fi
+  test-6-diagnostic-logging:
+    name: "Test 6: Diagnostic - Detailed Transaction Logging"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Minikube-Kubernetes
+        uses: manusa/actions-setup-minikube@8234275e0386fe1cdaf519d28c90f4f03fad89e4 # v2.15.0
+        with:
+          minikube version: ${{ env.MINIKUBE_VERSION }}
+          kubernetes version: ${{ env.KUBERNETES_VERSION }}
+          github token: ${{ secrets.GITHUB_TOKEN }}
+          driver: docker
+          start args: --addons=ingress --memory=${{ env.MINIKUBE_MEMORY }} --cni calico --cpus=max
+
+      - name: Install Keycloak Operator 26.4.7
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloaks.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/kubernetes.yml
+
+          echo "Waiting for operator pod to be created..."
+          kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=keycloak-operator || {
+            echo "Operator pod failed to become ready. Checking status..."
+            kubectl get pods -l app.kubernetes.io/name=keycloak-operator
+            kubectl describe pod -l app.kubernetes.io/name=keycloak-operator
+            echo "=== Operator logs (last 200 lines) ==="
+            kubectl logs -l app.kubernetes.io/name=keycloak-operator --tail=200 || true
+            exit 1
+          }
+
+          kubectl wait --for=condition=available --timeout=60s deployment/keycloak-operator
+
+      - name: Deploy PostgreSQL
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: postgresql-db
+          spec:
+            serviceName: postgresql-db-service
+            selector:
+              matchLabels:
+                app: postgresql-db
+            replicas: 1
+            template:
+              metadata:
+                labels:
+                  app: postgresql-db
+              spec:
+                containers:
+                  - name: postgresql-db
+                    image: postgres:15
+                    env:
+                      - name: POSTGRES_USER
+                        value: testuser
+                      - name: POSTGRES_PASSWORD
+                        value: testpassword
+                      - name: POSTGRES_DB
+                        value: keycloak
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: postgres-db
+          spec:
+            selector:
+              app: postgresql-db
+            ports:
+            - port: 5432
+          EOF
+
+          kubectl create secret generic keycloak-db-secret \
+            --from-literal=username=testuser \
+            --from-literal=password=testpassword
+
+          kubectl wait --for=condition=ready --timeout=120s pod -l app=postgresql-db
+
+      - name: Deploy Keycloak with DEBUG logging
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: k8s.keycloak.org/v2alpha1
+          kind: Keycloak
+          metadata:
+            name: test-diagnostic
+          spec:
+            instances: 1
+            db:
+              vendor: postgres
+              host: postgres-db
+              usernameSecret:
+                name: keycloak-db-secret
+                key: username
+              passwordSecret:
+                name: keycloak-db-secret
+                key: password
+              poolInitialSize: 1
+              poolMinSize: 2
+              poolMaxSize: 3
+            hostname:
+              hostname: test.local
+              strict: false
+            http:
+              httpEnabled: true
+            additionalOptions:
+              - name: shutdown-delay
+                value: "0s"
+              - name: log-level
+                value: "INFO,org.jgroups:DEBUG,org.jgroups.protocols.JDBC_PING:TRACE,org.hibernate.engine.transaction:DEBUG,org.hibernate.SQL:DEBUG,org.keycloak.connections.infinispan:DEBUG,org.keycloak.cluster:DEBUG,com.arjuna.ats:DEBUG"
+              - name: log-console-output
+                value: "json"
+          EOF
+
+      - name: Wait and collect diagnostic logs
+        run: |
+          echo "Waiting 240 seconds to capture the full startup including the slow transaction..."
+          sleep 240
+
+          echo "=== Pod Status ==="
+          kubectl get pods -l app=keycloak
+
+          echo -e "\n=== Collecting full logs ==="
+          kubectl logs test-diagnostic-0 2>&1 > /tmp/diagnostic-logs.txt
+
+          echo "=== Checking for acquisition timeout ==="
+          if grep -qi "acquisition" /tmp/diagnostic-logs.txt && grep -qi "timeout" /tmp/diagnostic-logs.txt; then
+            echo "✅ Acquisition timeout found (as expected)"
+            grep -i "acquisition" /tmp/diagnostic-logs.txt | grep -i "timeout" | head -5 || true
+          else
+            echo "No acquisition timeout found"
+          fi
+
+          echo -e "\n=== Transaction and JDBC_PING activity (last 500 lines before timeout) ==="
+          # Find the acquisition timeout line number
+          TIMEOUT_LINE=$(grep -n "acquisition timeout" /tmp/diagnostic-logs.txt | tail -1 | cut -d: -f1)
+          if [ -n "$TIMEOUT_LINE" ]; then
+            echo "Found timeout at line $TIMEOUT_LINE, showing 500 lines before it:"
+            START_LINE=$((TIMEOUT_LINE - 500))
+            if [ $START_LINE -lt 1 ]; then START_LINE=1; fi
+            sed -n "${START_LINE},${TIMEOUT_LINE}p" /tmp/diagnostic-logs.txt | grep -E "(transaction|JDBC_PING|BEGIN|COMMIT|ROLLBACK|SELECT|INSERT|UPDATE|DELETE|JTA)" || true
+          fi
+
+          echo -e "\n=== Full diagnostic logs ==="
+          cat /tmp/diagnostic-logs.txt
