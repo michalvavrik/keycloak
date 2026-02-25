@@ -699,6 +699,13 @@ jobs:
                 value: "0s"
               - name: cache-stack
                 value: "kubernetes"
+            unsupported:
+              podTemplate:
+                spec:
+                  containers:
+                    - name: keycloak
+                      args:
+                        - "-Djgroups.dns.query=test-kubernetes-stack-discovery.default"
           EOF
 
       - name: Wait and verify successful startup
