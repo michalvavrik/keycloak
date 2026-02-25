@@ -704,8 +704,9 @@ jobs:
                 spec:
                   containers:
                     - name: keycloak
-                      args:
-                        - "-Djgroups.dns.query=test-kubernetes-stack-discovery.default"
+                      env:
+                        - name: JAVA_OPTS_APPEND
+                          value: "-Djgroups.dns.query=test-kubernetes-stack-discovery.default"
           EOF
 
       - name: Wait and verify successful startup
