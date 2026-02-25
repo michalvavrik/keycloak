@@ -589,3 +589,154 @@ jobs:
             exit 1
           fi
 
+  test-5-kubernetes-stack-works:
+    name: "Test 5: v26.4.7 with kubernetes stack works (poolMaxSize=3)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Minikube-Kubernetes
+        uses: manusa/actions-setup-minikube@8234275e0386fe1cdaf519d28c90f4f03fad89e4 # v2.15.0
+        with:
+          minikube version: ${{ env.MINIKUBE_VERSION }}
+          kubernetes version: ${{ env.KUBERNETES_VERSION }}
+          github token: ${{ secrets.GITHUB_TOKEN }}
+          driver: docker
+          start args: --addons=ingress --memory=${{ env.MINIKUBE_MEMORY }} --cni calico --cpus=max
+
+      - name: Install Keycloak Operator 26.4.7
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloaks.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/kubernetes.yml
+
+          echo "Waiting for operator pod to be created..."
+          kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=keycloak-operator || {
+            echo "Operator pod failed to become ready. Checking status..."
+            kubectl get pods -l app.kubernetes.io/name=keycloak-operator
+            kubectl describe pod -l app.kubernetes.io/name=keycloak-operator
+            echo "=== Operator logs (last 200 lines) ==="
+            kubectl logs -l app.kubernetes.io/name=keycloak-operator --tail=200 || true
+            exit 1
+          }
+
+          kubectl wait --for=condition=available --timeout=60s deployment/keycloak-operator
+
+      - name: Deploy PostgreSQL
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: postgresql-db
+          spec:
+            serviceName: postgresql-db-service
+            selector:
+              matchLabels:
+                app: postgresql-db
+            replicas: 1
+            template:
+              metadata:
+                labels:
+                  app: postgresql-db
+              spec:
+                containers:
+                  - name: postgresql-db
+                    image: postgres:15
+                    env:
+                      - name: POSTGRES_USER
+                        value: testuser
+                      - name: POSTGRES_PASSWORD
+                        value: testpassword
+                      - name: POSTGRES_DB
+                        value: keycloak
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: postgres-db
+          spec:
+            selector:
+              app: postgresql-db
+            ports:
+            - port: 5432
+          EOF
+
+          kubectl create secret generic keycloak-db-secret \
+            --from-literal=username=testuser \
+            --from-literal=password=testpassword
+
+          kubectl wait --for=condition=ready --timeout=120s pod -l app=postgresql-db
+
+      - name: Deploy Keycloak v26.4.7 with kubernetes stack and poolMaxSize=3
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: k8s.keycloak.org/v2alpha1
+          kind: Keycloak
+          metadata:
+            name: test-kubernetes-stack
+          spec:
+            instances: 1
+            db:
+              vendor: postgres
+              host: postgres-db
+              usernameSecret:
+                name: keycloak-db-secret
+                key: username
+              passwordSecret:
+                name: keycloak-db-secret
+                key: password
+              poolInitialSize: 1
+              poolMinSize: 2
+              poolMaxSize: 3
+            hostname:
+              hostname: test.local
+              strict: false
+            http:
+              httpEnabled: true
+            additionalOptions:
+              - name: shutdown-delay
+                value: "0s"
+              - name: cache-stack
+                value: "kubernetes"
+          EOF
+
+      - name: Wait and verify successful startup
+        run: |
+          echo "Waiting 120 seconds for Keycloak startup..."
+          sleep 120
+
+          echo "=== Pod Status ==="
+          kubectl get pods -l app=keycloak
+
+          echo -e "\n=== Saving logs to file and checking for successful startup ==="
+          kubectl logs test-kubernetes-stack-0 2>&1 > /tmp/keycloak-logs.txt
+
+          if grep -q "Keycloak.*started in" /tmp/keycloak-logs.txt; then
+            echo "✅ SUCCESS: Keycloak 26.4.7 with kubernetes stack started successfully with poolMaxSize=3!"
+            grep "Keycloak.*started in" /tmp/keycloak-logs.txt
+
+            # Verify it's using kubernetes stack (not jdbc-ping)
+            if grep -q "stack \`kubernetes\`" /tmp/keycloak-logs.txt; then
+              echo "✅ Confirmed: Using kubernetes stack (DNS_PING), not jdbc-ping"
+            fi
+
+            # Verify NO acquisition timeout - this proves kubernetes stack doesn't have the issue
+            if grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
+              echo "❌ FAILURE: Found acquisition timeout even with kubernetes stack!"
+              grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" || true
+              echo -e "\n=== Full pod logs ==="
+              cat /tmp/keycloak-logs.txt
+              exit 1
+            fi
+
+            echo "✅ No acquisition timeouts found - kubernetes stack works with poolMaxSize=3!"
+            echo -e "\n=== Full pod logs ==="
+            cat /tmp/keycloak-logs.txt
+            exit 0
+          else
+            echo "❌ FAILURE: Keycloak did not start successfully!"
+            echo "Full logs:"
+            cat /tmp/keycloak-logs.txt
+            exit 1
+          fi
