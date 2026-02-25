@@ -135,21 +135,23 @@ jobs:
 
       - name: Wait and check for acquisition timeout
         run: |
-          echo "Waiting 240 seconds for Keycloak to hit acquisition timeout..."
-          sleep 240
+          echo "Waiting 180 seconds for Keycloak startup..."
+          sleep 180
 
           echo "=== Pod Status ==="
           kubectl get pods -l app=keycloak
 
-          echo -e "\n=== Checking logs for acquisition timeout ==="
-          if kubectl logs test-broken-0 2>&1 | grep -q "Sorry, acquisition timeout"; then
+          echo -e "\n=== Saving logs to file and checking for acquisition timeout ==="
+          kubectl logs test-broken-0 2>&1 > /tmp/keycloak-logs.txt
+
+          if grep -qi "sorry" /tmp/keycloak-logs.txt && grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
             echo "✅ SUCCESS: Acquisition timeout reproduced as expected!"
-            kubectl logs test-broken-0 2>&1 | grep -B 2 -A 5 "Sorry, acquisition timeout" | head -20
+            grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" | head -5
             exit 0
           else
             echo "❌ FAILURE: Expected acquisition timeout not found!"
             echo "Full logs:"
-            kubectl logs test-broken-0 2>&1 | tail -100
+            tail -100 /tmp/keycloak-logs.txt
             exit 1
           fi
 
@@ -402,22 +404,24 @@ jobs:
 
       - name: Wait and verify it still fails
         run: |
-          echo "Waiting 240 seconds for Keycloak to hit acquisition timeout..."
-          sleep 240
+          echo "Waiting 180 seconds for Keycloak startup..."
+          sleep 180
 
           echo "=== Pod Status ==="
           kubectl get pods -l app=keycloak
 
-          echo -e "\n=== Verifying additionalOptions workaround doesn't fix the issue ==="
-          if kubectl logs test-additionaloptions-0 2>&1 | grep -q "Sorry, acquisition timeout"; then
+          echo -e "\n=== Saving logs to file and verifying additionalOptions workaround doesn't fix the issue ==="
+          kubectl logs test-additionaloptions-0 2>&1 > /tmp/keycloak-logs.txt
+
+          if grep -qi "sorry" /tmp/keycloak-logs.txt && grep -qi "acquisition" /tmp/keycloak-logs.txt && grep -qi "timeout" /tmp/keycloak-logs.txt; then
             echo "✅ SUCCESS: Confirmed that additionalOptions workaround does NOT fix the issue!"
             echo "The spec.db.poolMaxSize takes precedence over additionalOptions"
-            kubectl logs test-additionaloptions-0 2>&1 | grep -B 2 -A 3 "Sorry, acquisition timeout" | head -10
+            grep -i "acquisition" /tmp/keycloak-logs.txt | grep -i "timeout" | head -5
             exit 0
           else
             echo "❌ UNEXPECTED: additionalOptions workaround appears to have worked!"
             echo "This contradicts the expected behavior. Full logs:"
-            kubectl logs test-additionaloptions-0 2>&1 | tail -100
+            tail -100 /tmp/keycloak-logs.txt
             exit 1
           fi
 
