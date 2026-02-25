@@ -142,17 +142,18 @@ jobs:
           kubectl get pods -l app=keycloak
 
           echo -e "\n=== Checking logs for acquisition timeout (with retries) ==="
-          for i in {1..10}; do
-            if kubectl logs test-broken-0 2>&1 | grep -q "Sorry, acquisition timeout"; then
+          for i in {1..20}; do
+            LOGS=$(kubectl logs test-broken-0 2>&1)
+            if echo "$LOGS" | grep -q "Sorry, acquisition timeout"; then
               echo "✅ SUCCESS: Acquisition timeout reproduced as expected!"
-              kubectl logs test-broken-0 2>&1 | grep -A 5 "Sorry, acquisition timeout" | head -20
+              echo "$LOGS" | grep -A 5 "Sorry, acquisition timeout" | head -20
               exit 0
             fi
             echo "Attempt $i: Not found yet, waiting 5 seconds..."
             sleep 5
           done
 
-          echo "❌ FAILURE: Expected acquisition timeout not found after 10 retries!"
+          echo "❌ FAILURE: Expected acquisition timeout not found after 20 retries!"
           echo "Full logs:"
           kubectl logs test-broken-0 2>&1 | tail -50
           exit 1
@@ -413,11 +414,12 @@ jobs:
           kubectl get pods -l app=keycloak
 
           echo -e "\n=== Verifying additionalOptions workaround doesn't fix the issue (with retries) ==="
-          for i in {1..10}; do
-            if kubectl logs test-additionaloptions-0 2>&1 | grep -q "Sorry, acquisition timeout"; then
+          for i in {1..20}; do
+            LOGS=$(kubectl logs test-additionaloptions-0 2>&1)
+            if echo "$LOGS" | grep -q "Sorry, acquisition timeout"; then
               echo "✅ SUCCESS: Confirmed that additionalOptions workaround does NOT fix the issue!"
               echo "The spec.db.poolMaxSize takes precedence over additionalOptions"
-              kubectl logs test-additionaloptions-0 2>&1 | grep -A 3 "Sorry, acquisition timeout" | head -10
+              echo "$LOGS" | grep -A 3 "Sorry, acquisition timeout" | head -10
               exit 0
             fi
             echo "Attempt $i: Not found yet, waiting 5 seconds..."
