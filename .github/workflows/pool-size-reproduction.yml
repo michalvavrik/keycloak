@@ -893,3 +893,192 @@ jobs:
 
           echo -e "\n=== Full diagnostic logs ==="
           cat /tmp/diagnostic-logs.txt
+
+  test-7-find-minimum-pool-size:
+    name: "Test 7: Find Minimum Working poolMaxSize"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Minikube-Kubernetes
+        uses: manusa/actions-setup-minikube@8234275e0386fe1cdaf519d28c90f4f03fad89e4 # v2.15.0
+        with:
+          minikube version: ${{ env.MINIKUBE_VERSION }}
+          kubernetes version: ${{ env.KUBERNETES_VERSION }}
+          github token: ${{ secrets.GITHUB_TOKEN }}
+          driver: docker
+          start args: --addons=ingress --memory=${{ env.MINIKUBE_MEMORY }} --cni calico --cpus=max
+
+      - name: Install Keycloak Operator 26.4.7
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloaks.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/kubernetes.yml
+
+          echo "Waiting for operator pod to be created..."
+          kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=keycloak-operator || {
+            echo "Operator pod failed to become ready. Checking status..."
+            kubectl get pods -l app.kubernetes.io/name=keycloak-operator
+            kubectl describe pod -l app.kubernetes.io/name=keycloak-operator
+            echo "=== Operator logs (last 200 lines) ==="
+            kubectl logs -l app.kubernetes.io/name=keycloak-operator --tail=200 || true
+            exit 1
+          }
+
+          kubectl wait --for=condition=available --timeout=60s deployment/keycloak-operator
+
+      - name: Deploy PostgreSQL
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata:
+            name: postgresql-db
+          spec:
+            serviceName: postgresql-db-service
+            selector:
+              matchLabels:
+                app: postgresql-db
+            replicas: 1
+            template:
+              metadata:
+                labels:
+                  app: postgresql-db
+              spec:
+                containers:
+                  - name: postgresql-db
+                    image: postgres:15
+                    env:
+                      - name: POSTGRES_USER
+                        value: testuser
+                      - name: POSTGRES_PASSWORD
+                        value: testpassword
+                      - name: POSTGRES_DB
+                        value: keycloak
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: postgres-db
+          spec:
+            selector:
+              app: postgresql-db
+            ports:
+            - port: 5432
+          EOF
+
+          kubectl create secret generic keycloak-db-secret \
+            --from-literal=username=testuser \
+            --from-literal=password=testpassword
+
+          kubectl wait --for=condition=ready --timeout=120s pod -l app=postgresql-db
+
+      - name: Find minimum working poolMaxSize
+        run: |
+          KC_NAME="test-min-pool"
+          MIN_SIZE=3
+          MAX_SIZE=15
+
+          for POOL_SIZE in $(seq $MIN_SIZE $MAX_SIZE); do
+            echo ""
+            echo "========================================="
+            echo "  Testing poolMaxSize=$POOL_SIZE"
+            echo "========================================="
+
+            cat <<EOF | kubectl apply -f -
+          apiVersion: k8s.keycloak.org/v2alpha1
+          kind: Keycloak
+          metadata:
+            name: $KC_NAME
+          spec:
+            instances: 1
+            db:
+              vendor: postgres
+              host: postgres-db
+              usernameSecret:
+                name: keycloak-db-secret
+                key: username
+              passwordSecret:
+                name: keycloak-db-secret
+                key: password
+              poolInitialSize: 1
+              poolMinSize: 2
+              poolMaxSize: $POOL_SIZE
+            hostname:
+              hostname: test.local
+              strict: false
+            http:
+              httpEnabled: true
+            additionalOptions:
+              - name: shutdown-delay
+                value: "0s"
+          EOF
+
+            # Wait for pod to appear
+            echo "Waiting for pod ${KC_NAME}-0..."
+            for w in $(seq 1 60); do
+              if kubectl get pod ${KC_NAME}-0 &>/dev/null; then
+                # Wait until the container is at least running (not ContainerCreating)
+                PHASE=$(kubectl get pod ${KC_NAME}-0 -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+                if [ "$PHASE" = "Running" ]; then
+                  break
+                fi
+              fi
+              sleep 2
+            done
+
+            # Poll for success or acquisition timeout (up to 240s)
+            RESULT="unknown"
+            for i in $(seq 1 24); do
+              sleep 10
+              LOGS=$(kubectl logs ${KC_NAME}-0 2>&1 || echo "")
+
+              if echo "$LOGS" | grep -q "Keycloak.*started in"; then
+                RESULT="success"
+                break
+              fi
+
+              if echo "$LOGS" | grep -qi "sorry" && echo "$LOGS" | grep -qi "acquisition" && echo "$LOGS" | grep -qi "timeout"; then
+                RESULT="timeout"
+                break
+              fi
+
+              # If pod restarted, the first attempt already failed
+              RESTARTS=$(kubectl get pod ${KC_NAME}-0 -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo "0")
+              if [ "${RESTARTS:-0}" -gt "0" ]; then
+                # Check previous container logs for acquisition timeout
+                PREV_LOGS=$(kubectl logs ${KC_NAME}-0 --previous 2>&1 || echo "")
+                if echo "$PREV_LOGS" | grep -qi "sorry" && echo "$PREV_LOGS" | grep -qi "acquisition"; then
+                  RESULT="timeout"
+                else
+                  RESULT="crashed"
+                fi
+                break
+              fi
+            done
+
+            if [ "$RESULT" = "success" ]; then
+              echo ""
+              echo "========================================="
+              echo "  RESULT: poolMaxSize=$POOL_SIZE WORKS"
+              echo "  This is the minimum working value!"
+              echo "========================================="
+              kubectl logs ${KC_NAME}-0 | grep "Keycloak.*started in"
+              exit 0
+            fi
+
+            echo "  poolMaxSize=$POOL_SIZE FAILED ($RESULT)"
+            kubectl logs ${KC_NAME}-0 2>&1 | grep -i "acquisition" | grep -i "timeout" | head -3 || true
+
+            # Clean up before next iteration
+            kubectl delete keycloak $KC_NAME --wait=true --timeout=60s 2>/dev/null || true
+            kubectl wait --for=delete pod/${KC_NAME}-0 --timeout=60s 2>/dev/null || true
+            sleep 5
+          done
+
+          echo ""
+          echo "========================================="
+          echo "  FAILURE: No working poolMaxSize found"
+          echo "  in range ${MIN_SIZE}-${MAX_SIZE}!"
+          echo "========================================="
+          exit 1
