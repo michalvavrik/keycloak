@@ -895,7 +895,7 @@ jobs:
           cat /tmp/diagnostic-logs.txt
 
   test-7-find-minimum-pool-size:
-    name: "Test 7: Find Minimum Working poolMaxSize"
+    name: "Test 7: Find Minimum Working poolMaxSize (v26.5.4)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -909,11 +909,11 @@ jobs:
           driver: docker
           start args: --addons=ingress --memory=${{ env.MINIKUBE_MEMORY }} --cni calico --cpus=max
 
-      - name: Install Keycloak Operator 26.4.7
+      - name: Install Keycloak Operator 26.5.4
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloaks.k8s.keycloak.org-v1.yml
-          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml
-          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.4.7/kubernetes/kubernetes.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.5.4/kubernetes/keycloaks.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.5.4/kubernetes/keycloakrealmimports.k8s.keycloak.org-v1.yml
+          kubectl apply -f https://raw.githubusercontent.com/keycloak/keycloak-k8s-resources/26.5.4/kubernetes/kubernetes.yml
 
           echo "Waiting for operator pod to be created..."
           kubectl wait --for=condition=ready --timeout=300s pod -l app.kubernetes.io/name=keycloak-operator || {
