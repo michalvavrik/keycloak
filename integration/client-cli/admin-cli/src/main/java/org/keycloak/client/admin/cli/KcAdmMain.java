@@ -17,9 +17,12 @@
 package org.keycloak.client.admin.cli;
 
 import org.keycloak.client.admin.cli.commands.KcAdmCmd;
+import org.keycloak.client.admin.cli.v2.KcAdmV2Cmd;
 import org.keycloak.client.cli.common.CommandState;
 import org.keycloak.client.cli.common.Globals;
 import org.keycloak.client.cli.util.OsUtil;
+
+import picocli.CommandLine;
 
 /**
  * @author <a href="mailto:mstrukel@redhat.com">Marko Strukelj</a>
@@ -52,7 +55,18 @@ public class KcAdmMain {
     };
 
     public static void main(String [] args) {
-        Globals.main(args, new KcAdmCmd(), CMD, DEFAULT_CONFIG_FILE_STRING);
+        if (Boolean.getBoolean("v2")) {
+            mainV2(args);
+        } else {
+            Globals.main(args, new KcAdmCmd(), CMD, DEFAULT_CONFIG_FILE_STRING);
+        }
+    }
+
+    private static void mainV2(String[] args) {
+        KcAdmV2Cmd rootCmd = new KcAdmV2Cmd();
+        CommandLine cli = rootCmd.createCommandLine();
+        int exitCode = cli.execute(args);
+        System.exit(exitCode);
     }
 
 }
