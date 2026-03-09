@@ -16,7 +16,11 @@
  */
 package org.keycloak.client.admin.cli;
 
+import java.util.Arrays;
+
 import org.keycloak.client.admin.cli.commands.KcAdmCmd;
+import org.keycloak.client.admin.cli.v2.KcAdmV2Cmd;
+import org.keycloak.client.cli.common.BaseGlobalOptionsCmd;
 import org.keycloak.client.cli.common.CommandState;
 import org.keycloak.client.cli.common.Globals;
 import org.keycloak.client.cli.util.OsUtil;
@@ -51,8 +55,33 @@ public class KcAdmMain {
 
     };
 
+    private static final String CLI_VERSION_2 = "--v2";
+
     public static void main(String [] args) {
-        Globals.main(args, new KcAdmCmd(), CMD, DEFAULT_CONFIG_FILE_STRING);
+        final BaseGlobalOptionsCmd cmd;
+        final String[] filteredArgs;
+        if (useVersion1(args)) {
+            filteredArgs = args;
+            cmd = new KcAdmCmd();
+        } else {
+            filteredArgs = removeCliVersion2Arg(args);
+            cmd = new KcAdmV2Cmd();
+        }
+        Globals.main(filteredArgs, cmd, CMD, DEFAULT_CONFIG_FILE_STRING);
     }
 
+    private static boolean useVersion1(String[] args) {
+        if (args != null) {
+            for (String arg : args) {
+                if (CLI_VERSION_2.equalsIgnoreCase(arg)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static String[] removeCliVersion2Arg(String[] args) {
+        return Arrays.stream(args).filter(a -> !CLI_VERSION_2.equalsIgnoreCase(a)).toArray(String[]::new);
+    }
 }
