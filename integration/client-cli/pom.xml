@@ -31,6 +31,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>admin-cli-v2-commands</module>
         <module>admin-cli</module>
         <module>client-cli-dist</module>
     </modules>

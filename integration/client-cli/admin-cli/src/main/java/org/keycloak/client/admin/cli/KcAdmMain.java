@@ -17,6 +17,8 @@
 package org.keycloak.client.admin.cli;
 
 import org.keycloak.client.admin.cli.commands.KcAdmCmd;
+import org.keycloak.client.admin.cli.v2.KcAdmV2Cmd;
+import org.keycloak.client.cli.common.BaseGlobalOptionsCmd;
 import org.keycloak.client.cli.common.CommandState;
 import org.keycloak.client.cli.common.Globals;
 import org.keycloak.client.cli.util.OsUtil;
@@ -52,7 +54,8 @@ public class KcAdmMain {
     };
 
     public static void main(String [] args) {
-        Globals.main(args, new KcAdmCmd(), CMD, DEFAULT_CONFIG_FILE_STRING);
+        final BaseGlobalOptionsCmd cmd = Boolean.getBoolean("v2") ? new KcAdmV2Cmd() : new KcAdmCmd();
+        Globals.main(args, cmd, CMD, DEFAULT_CONFIG_FILE_STRING);
     }
 
 }
