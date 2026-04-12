@@ -1,0 +1,29 @@
+<#import "/templates/guide.adoc" as tmpl>
+
+<@tmpl.guide
+title="Admin API v2"
+summary="REST API for managing Keycloak resources. Experimental feature.">
+
+== Prerequisites
+
+The Admin API v2 requires the `client-admin-api-v2` feature:
+
+[source,bash]
+----
+bin/kc.sh start --features=client-admin-api-v2
+----
+
+== Available Resources
+
+<#if ctx.adminApiV2.hasEndpoints()>
+<#import "/templates/api.adoc" as api>
+<#list ctx.adminApiV2.categories as category>
+=== ${category?cap_first}
+
+<@api.endpoints category=category/>
+</#list>
+<#else>
+API documentation metadata is not available in this build.
+</#if>
+
+</@tmpl.guide>

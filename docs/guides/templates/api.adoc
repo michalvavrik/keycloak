@@ -1,0 +1,103 @@
+<#function escapeAsciidoc text>
+  <#return text?replace("{", "\\{")>
+</#function>
+<#macro endpoint op>
+<#assign escapedPath = escapeAsciidoc(op.path)>
+===== ${op.httpMethod} `${escapedPath}`
+
+${(op.summary)!}
+
+<#if (op.description)?has_content>
+${op.description}
+
+</#if>
+====== HTTP Request
+
+[source,http]
+----
+${op.httpMethod} ${op.path} HTTP/1.1
+<#if (op.requestBody.contentType)??>
+Content-Type: ${op.requestBody.contentType}
+</#if>
+----
+
+<#assign cliEx = (ctx.adminApiV2.getCliExample(op.operationId))!>
+<#if cliEx?has_content>
+====== CLI
+
+[source,bash]
+----
+${cliEx}
+----
+
+</#if>
+<#if (op.javaExample)?has_content>
+====== Java Client
+
+[source,java]
+----
+${op.javaExample}
+----
+
+</#if>
+<#assign jsEx = (ctx.adminApiV2.getJsExample(op.operationId))!>
+<#if jsEx?has_content>
+====== JavaScript Client
+
+[source,javascript]
+----
+${jsEx}
+----
+
+</#if>
+<#if (op.parameters)?has_content>
+====== Parameters
+
+<#list op.parameters as param>
+* `${param.name}` (${(param.in)!}) — ${(param.description)!}
+</#list>
+
+</#if>
+<#if (op.responses)??>
+====== Responses
+
+<#list op.responses?keys as code>
+* `${code}` — ${(op.responses[code].description)!}
+</#list>
+
+</#if>
+</#macro>
+
+<#macro endpoints category>
+<#assign eps = ctx.adminApiV2.getEndpoints(category)>
+<#assign javaInterface = (ctx.adminApiV2.getJavaInterface(category))!>
+<#assign javaVar = (ctx.adminApiV2.getJavaVariableName(category))!>
+<#if eps?has_content && javaInterface?has_content>
+==== Java Client Setup
+
+[source,java]
+----
+import org.keycloak.admin.client.Keycloak;
+import ${javaInterface};
+
+Keycloak adminClient = Keycloak.getInstance("http://localhost:8080", "master", "admin", "password", "admin-cli");
+${javaInterface?keep_after_last(".")} ${javaVar} = adminClient.${category}(realmName).v2();
+----
+
+</#if>
+<#if eps?has_content>
+==== JavaScript Client Setup
+
+[source,javascript]
+----
+import KcAdminClient from "@keycloak/keycloak-admin-client";
+
+const kcAdminClient = new KcAdminClient({ baseUrl: "http://localhost:8080" });
+await kcAdminClient.auth({ username: "admin", password: "admin", grantType: "password", clientId: "admin-cli" });
+----
+
+</#if>
+<#list eps as op>
+<@endpoint op=op/>
+</#list>
+</#macro>
