@@ -41,6 +41,7 @@ import static org.keycloak.utils.StringUtil.isNullOrEmpty;
 public class OASModelFilter implements OASFilter {
 
     private final Logger log = Logger.getLogger(OASModelFilter.class);
+    private final IndexView indexView;
     private final Map<String, ClassInfo> simpleNameToClassInfoMap = new HashMap<>();
 
     public static final String REF_PREFIX = "#/components/schemas/";
@@ -48,6 +49,7 @@ public class OASModelFilter implements OASFilter {
 
     public OASModelFilter(IndexView indexView) {
         log.debug("Index size: " + indexView.getKnownClasses().size());
+        this.indexView = indexView;
 
         indexView.getKnownClasses().forEach(classInfo -> {
             simpleNameToClassInfoMap.put(classInfo.simpleName(), classInfo);
@@ -90,6 +92,8 @@ public class OASModelFilter implements OASFilter {
 
         addDescriptionsToSchemasProperties(openAPI);
         addSecurityScheme(openAPI);
+
+        addJavaExampleExtensions(openAPI);
     }
 
     /**
@@ -370,4 +374,9 @@ public class OASModelFilter implements OASFilter {
     private static boolean hasNoSchemas(OpenAPI openAPI) {
         return openAPI.getComponents() == null || openAPI.getComponents().getSchemas() == null;
     }
+
+    private void addJavaExampleExtensions(OpenAPI openAPI) {
+        new JavaDocExampleGenerator(indexView).generate(openAPI);
+    }
+
 }

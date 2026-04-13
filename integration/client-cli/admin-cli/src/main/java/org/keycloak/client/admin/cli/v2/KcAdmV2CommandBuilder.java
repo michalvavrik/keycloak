@@ -44,12 +44,11 @@ class KcAdmV2CommandBuilder {
     }
 
     private static CommandLine buildSubcommand(CommandDescriptor cmd) {
-        List<VariantDescriptor> variants = cmd.getVariants();
-        if (variants != null && !variants.isEmpty()) {
+        if (cmd.hasVariants()) {
             return buildVariantParentCommand(cmd);
         }
 
-        return buildLeafCommand(cmd, cmd.getOptions(), null);
+        return buildLeafCommand(cmd, cmd.getOptions(), cmd.hasRequestBody(), null);
     }
 
     private static CommandLine buildVariantParentCommand(CommandDescriptor cmd) {
@@ -64,14 +63,14 @@ class KcAdmV2CommandBuilder {
 
         for (VariantDescriptor variant : cmd.getVariants()) {
             parentCli.addSubcommand(variant.getName(),
-                    buildLeafCommand(cmd, variant.getOptions(), variant));
+                    buildLeafCommand(cmd, variant.getOptions(), true, variant));
         }
 
         return parentCli;
     }
 
     private static CommandLine buildLeafCommand(CommandDescriptor cmd,
-            List<OptionDescriptor> options, VariantDescriptor variant) {
+            List<OptionDescriptor> options, boolean hasRequestBody, VariantDescriptor variant) {
         KcAdmV2RequestExecutor executor = new KcAdmV2RequestExecutor(cmd, variant);
         CommandSpec spec = CommandSpec.forAnnotatedObject(executor);
         spec.name(variant != null ? variant.getName() : cmd.getName());
@@ -97,7 +96,7 @@ class KcAdmV2CommandBuilder {
                     .build());
         }
 
-        if (options != null && !options.isEmpty()) {
+        if (hasRequestBody) {
             ArgGroupSpec.Builder fieldGroup = ArgGroupSpec.builder()
                     .heading("%nOptions:%n")
                     .exclusive(false)
