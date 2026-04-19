@@ -37,10 +37,13 @@ public class KcAdmV2DescriptorBuilder {
     static final String ID_PATH_PARAM = "{id}";
 
 
+    static final String CMD_NAME_GET = "get";
+    static final String CMD_NAME_PATCH = "patch";
+
     private static final Map<PathItem.HttpMethod, String> HTTP_METHOD_TO_COMMAND = Map.of(
-            PathItem.HttpMethod.GET, "get",
+            PathItem.HttpMethod.GET, CMD_NAME_GET,
             PathItem.HttpMethod.POST, "create",
-            PathItem.HttpMethod.PATCH, "patch",
+            PathItem.HttpMethod.PATCH, CMD_NAME_PATCH,
             PathItem.HttpMethod.DELETE, "delete",
             PathItem.HttpMethod.PUT, "update"
     );
