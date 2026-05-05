@@ -51,4 +51,10 @@ public class EmbeddedKeycloakServer implements KeycloakServer {
             return "http://localhost:9001";
         }
     }
+
+    @Override
+    public String getLoggerName() {
+        // Empty string means root logger - captures all logs in the same JVM
+        return "";
+    }
 }

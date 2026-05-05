@@ -40,6 +40,7 @@ import org.jetbrains.annotations.NotNull;
 public class DistributionKeycloakServer implements KeycloakServer {
 
     private static final Logger log = Logger.getLogger(DistributionKeycloakServer.class);
+    private static final String MANAGED_KEYCLOAK_LOGGER = "managed.keycloak";
 
     private static final File INSTALL_DIR = Path.of(TmpDir.resolveTmpDir().getAbsolutePath(), "kc-test-framework", "keycloak").toFile();
     private static final String CMD = "kc" + (Environment.isWindows() ? ".bat" : ".sh");
@@ -214,6 +215,11 @@ public class DistributionKeycloakServer implements KeycloakServer {
         }
     }
 
+    @Override
+    public String getLoggerName() {
+        return MANAGED_KEYCLOAK_LOGGER;
+    }
+
     private boolean createInstallation() throws IOException {
         File dist = resolveKeycloakDist();
 
@@ -333,7 +339,7 @@ public class DistributionKeycloakServer implements KeycloakServer {
     private class OutputHandler implements Runnable {
 
         private static final Pattern LOG_PATTERN = Pattern.compile("([^ ]*) ([^ ]*) ([A-Z]*)([ ]*)(.*)");
-        private static final Logger LOGGER = Logger.getLogger("managed.keycloak");
+        private static final Logger LOGGER = Logger.getLogger(MANAGED_KEYCLOAK_LOGGER);
 
         private boolean startedInPrinted = false;
         private final Process process;

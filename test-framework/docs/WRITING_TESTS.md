@@ -424,6 +424,109 @@ This allows pulling events that have occurred in the duration of a test method.
 
 ## Run-on-Server
 
+## Asserting server logs
+
+Server logs can be asserted during test execution using `@InjectLogs`:
+
+```java
+@InjectLogs
+Logs logs;
+
+@Test
+public void testNoErrors() {
+    // Perform operations
+    performSomeOperation();
+    
+    // Assert no errors were logged
+    logs.assertNoErrors();
+}
+
+@Test
+public void testSpecificLogExists() {
+    // Perform operation that should log a warning
+    performOperationWithWarning();
+    
+    // Assert specific log message exists
+    logs.assertExists("WARN", "Connection timeout");
+}
+```
+
+### Available Methods
+
+| Method | Description |
+|--------|-------------|
+| `assertNoErrors()` | Asserts no ERROR logs were generated |
+| `assertNoWarningsOrErrors()` | Asserts no WARN or ERROR logs were generated |
+| `assertExists(level, message)` | Asserts a log with specified level and message exists |
+| `assertExistsRegex(level, pattern)` | Asserts a log matching regex pattern exists |
+| `assertNotExists(level, message)` | Asserts NO log with specified level and message exists |
+| `getAllLogs()` | Returns all captured logs |
+| `getLogs(level)` | Returns logs at specified level |
+| `clear()` | Clears all captured logs |
+| `size()` | Returns number of captured logs |
+
+### Log Levels
+
+Supported log levels (case-insensitive):
+- `ERROR` or `SEVERE`
+- `WARN` or `WARNING`
+- `INFO`
+- `DEBUG` or `FINE`
+- `TRACE` or `FINER`
+- `ALL`
+
+### Configuration
+
+Specify minimum log level to capture:
+
+```java
+@InjectLogs(level = "WARN")
+Logs logs;
+```
+
+### Multiple Instances
+
+Use `ref` for multiple log instances:
+
+```java
+@InjectLogs(ref = "auth-logs")
+Logs authLogs;
+
+@InjectLogs(ref = "db-logs")
+Logs dbLogs;
+```
+
+### Best Practices
+
+1. **Clear logs between test sections** if testing multiple scenarios in one test
+2. **Use specific log levels** to reduce noise: `@InjectLogs(level = "WARN")`
+3. **Use regex patterns** for flexible matching when exact messages vary
+4. **Combine with Events** for comprehensive test assertions
+
+### Example: Combined Events and Logs
+
+```java
+@InjectEvents
+Events events;
+
+@InjectLogs
+Logs logs;
+
+@Test
+public void testAuthenticationFlow() {
+    // Perform authentication
+    oAuthClient.doPasswordGrantRequest("user", "password");
+    
+    // Verify event was recorded
+    EventAssertion.assertSuccess(events.poll()).type(EventType.LOGIN);
+    
+    // Verify no errors were logged during authentication
+    logs.assertNoErrors();
+}
+```
+
+
+
 The `keycloak-test-framework-remote` extensions installs a custom provider on the Keycloak server that enables executing
 code on the Keycloak server.
 

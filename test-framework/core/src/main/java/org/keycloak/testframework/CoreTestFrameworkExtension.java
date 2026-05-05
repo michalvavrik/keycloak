@@ -14,6 +14,7 @@ import org.keycloak.testframework.database.TestDatabase;
 import org.keycloak.testframework.events.AdminEventsSupplier;
 import org.keycloak.testframework.events.EventsSupplier;
 import org.keycloak.testframework.events.SysLogServerSupplier;
+import org.keycloak.testframework.logs.LogsSupplier;
 import org.keycloak.testframework.http.HttpClientSupplier;
 import org.keycloak.testframework.http.HttpServerSupplier;
 import org.keycloak.testframework.http.SimpleHttpSupplier;
@@ -49,6 +50,7 @@ public class CoreTestFrameworkExtension implements TestFrameworkExtension {
                 new SysLogServerSupplier(),
                 new EventsSupplier(),
                 new AdminEventsSupplier(),
+                new LogsSupplier(),
                 new HttpClientSupplier(),
                 new HttpServerSupplier(),
                 new SimpleHttpSupplier(),
