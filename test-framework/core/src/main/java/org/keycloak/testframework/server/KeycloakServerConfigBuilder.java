@@ -25,6 +25,7 @@ public class KeycloakServerConfigBuilder {
     private final Set<String> featuresDisabled = new HashSet<>();
     private final LogBuilder log = new LogBuilder();
     private final Set<KeycloakDependency> dependencies = new HashSet<>();
+    private final Map<Integer, Logs> logs = new HashMap<>();
     private CacheType cacheType = CacheType.LOCAL;
     private boolean externalInfinispan = false;
     private String shutdownDelay = "0s";
@@ -93,6 +94,18 @@ public class KeycloakServerConfigBuilder {
 
     public boolean isExternalInfinispanEnabled() {
         return this.externalInfinispan;
+    }
+
+    void addLogs(int node, Logs logs) {
+        this.logs.put(node, logs);
+    }
+
+    Logs getLogs(int node) {
+        return logs.get(node);
+    }
+
+    boolean hasLogs() {
+        return !logs.isEmpty();
     }
 
     public KeycloakServerConfigBuilder shutdownDelay(String shutdownDelay) {

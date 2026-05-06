@@ -28,6 +28,7 @@ import org.keycloak.testframework.infinispan.CacheType;
 import org.keycloak.testframework.logging.JBossContainerLogConsumer;
 
 import org.jboss.logging.Logger;
+import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.LazyFuture;
@@ -103,7 +104,7 @@ public class ClusteredKeycloakServer implements KeycloakServer {
 
             copyProvidersAndConfigs(container, configBuilder);
 
-            configureLogConsumers(container, i, clusterLatch);
+            configureLogConsumers(container, i, configBuilder, clusterLatch);
             container.run(configBuilder.toArgs());
         }
     }
@@ -118,14 +119,23 @@ public class ClusteredKeycloakServer implements KeycloakServer {
             containers[i] = container;
 
             copyProvidersAndConfigs(container, configBuilder);
-            configureLogConsumers(container, i, clusterLatch);
+            configureLogConsumers(container, i, configBuilder, clusterLatch);
             container.run(configBuilder.toArgs());
         }
     }
 
-    private static void configureLogConsumers(DockerKeycloakDistribution container, int index, CountdownLatchLoggingConsumer clusterLatch) {
+    private static void configureLogConsumers(DockerKeycloakDistribution container, int index, KeycloakServerConfigBuilder configBuilder, CountdownLatchLoggingConsumer clusterLatch) {
         var logger = new JBossContainerLogConsumer(Logger.getLogger("managed.keycloak." + index));
-        container.setCustomLogConsumer(logger.andThen(clusterLatch));
+        Logs nodeLogs = configBuilder.getLogs(index);
+        if (nodeLogs != null) {
+            container.setCustomLogConsumer(logger.andThen(clusterLatch).andThen(frame -> {
+                String line = frame.getUtf8StringWithoutLineEnding();
+                boolean stderr = frame.getType() == OutputFrame.OutputType.STDERR;
+                nodeLogs.add(LogEntry.parse(line, stderr));
+            }));
+        } else {
+            container.setCustomLogConsumer(logger.andThen(clusterLatch));
+        }
     }
 
     private void copyProvidersAndConfigs(DockerKeycloakDistribution container, KeycloakServerConfigBuilder configBuilder) {
