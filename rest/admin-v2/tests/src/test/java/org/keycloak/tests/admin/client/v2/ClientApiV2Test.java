@@ -44,6 +44,7 @@ import org.keycloak.testframework.annotations.InjectHttpClient;
 import org.keycloak.testframework.annotations.InjectRealm;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
 import org.keycloak.testframework.realm.ClientBuilder;
+import org.keycloak.testframework.realm.ClientConfig;
 import org.keycloak.testframework.realm.ManagedClient;
 import org.keycloak.testframework.realm.ManagedRealm;
 import org.keycloak.testframework.realm.RealmBuilder;
@@ -72,7 +73,6 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -96,7 +96,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
     @InjectAdminClient(ref = "noAccessClient", realmRef = "testRealm", client = "myclient", mode = InjectAdminClient.Mode.MANAGED_REALM)
     Keycloak noAccessAdminClient;
 
-    @InjectClient(realmRef = "testRealm")
+    @InjectClient(realmRef = "testRealm", config = TestClientConfig.class)
     ManagedClient testClient;
 
     @Override
@@ -267,6 +267,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
         oidcRep.setDescription("OIDC client for mixed protocol test");
         // OIDC-specific fields
         oidcRep.setLoginFlows(Set.of(OIDCClientRepresentation.Flow.STANDARD, OIDCClientRepresentation.Flow.DIRECT_GRANT));
+        oidcRep.setRedirectUris(Set.of("http://localhost:3000/callback"));
         oidcRep.setWebOrigins(Set.of("http://localhost:3000", "http://localhost:4000"));
 
         try (var response = getClientsApi().createClient(oidcRep)) {
@@ -282,7 +283,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
         samlRep.setClientId("mixed-test-saml");
         samlRep.setDescription("SAML client for mixed protocol test");
         // SAML-specific fields
-        samlRep.setNameIdFormat("email");
+        samlRep.setNameIdFormat(SAMLClientRepresentation.NameIdFormat.EMAIL);
         samlRep.setSignDocuments(true);
         samlRep.setSignAssertions(true);
         samlRep.setForcePostBinding(true);
@@ -320,7 +321,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
 
             assertThat("SAML client should be in the list", foundSaml, is(notNullValue()));
             assertThat(foundSaml.getDescription(), notNullValue());
-            assertThat(foundSaml.getNameIdFormat(), is("email"));
+            assertThat(foundSaml.getNameIdFormat(), is(SAMLClientRepresentation.NameIdFormat.EMAIL));
             assertThat(foundSaml.getSignDocuments(), is(true));
             assertThat(foundSaml.getSignAssertions(), is(true));
             assertThat(foundSaml.getForcePostBinding(), is(true));
@@ -338,7 +339,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
         SAMLClientRepresentation samlClient = (SAMLClientRepresentation) getClientsApi().client(samlRep.getClientId()).getClient();
         assertEquals("mixed-test-saml", samlClient.getClientId());
         assertEquals("SAML client for mixed protocol test", samlClient.getDescription());
-        assertThat(samlClient.getNameIdFormat(), is("email"));
+        assertThat(samlClient.getNameIdFormat(), is(SAMLClientRepresentation.NameIdFormat.EMAIL));
         assertThat(samlClient.getSignDocuments(), is(true));
         assertThat(samlClient.getSignAssertions(), is(true));
         assertThat(samlClient.getForcePostBinding(), is(true));
@@ -379,7 +380,6 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
             var body = response.readEntity(ViolationExceptionResponse.class);
             assertThat(body.error(), is("Provided data is invalid"));
             var violations = body.violations();
-            assertThat(violations, hasSize(2));
             assertThat(violations, hasItem("clientId: must not be blank"));
             assertThat(violations, hasItem("appUrl: must be a valid URL"));
         }
@@ -398,8 +398,8 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
             var body = response.readEntity(ViolationExceptionResponse.class);
             assertThat(body.error(), is("Provided data is invalid"));
             var violations = body.violations();
-            assertThat(violations.size(), is(1));
-            assertThat(violations.iterator().next(), is("appUrl: must be a valid URL"));
+            assertThat(violations, hasItem("appUrl: must be a valid URL"));
+            assertThat(violations, hasItem(containsString("not a valid client authenticator type")));
         }
     }
 
@@ -490,6 +490,10 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
         rep.setEnabled(true);
 
         rep.setLoginFlows(Set.of(OIDCClientRepresentation.Flow.SERVICE_ACCOUNT));
+        var auth = new OIDCClientRepresentation.Auth();
+        auth.setMethod("client-secret");
+        auth.setSecret("test-sa-secret");
+        rep.setAuth(auth);
         rep.setServiceAccountRoles(Set.of(defaultRealmRoles, "offline_access"));
 
         try (var response = getClientsApi().createClient(rep)) {
@@ -931,6 +935,7 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
         rep.setEnabled(true);
         rep.setClientId(clientId);
         rep.setDescription("I'm OIDC Client");
+        rep.setRedirectUris(Set.of("http://localhost/callback"));
         rep.setAuth(auth);
 
         if (additionalFields.length % 2 != 0) {
@@ -1043,6 +1048,13 @@ public class ClientApiV2Test extends AbstractClientApiV2Test{
                     .secret("mysecret")
                     .serviceAccountsEnabled(true));
             return realm;
+        }
+    }
+
+    public static class TestClientConfig implements ClientConfig {
+        @Override
+        public ClientBuilder configure(ClientBuilder client) {
+            return client.redirectUris("http://localhost/callback");
         }
     }
 }

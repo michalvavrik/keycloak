@@ -113,4 +113,5 @@ public class PatchClientValidationTest extends AbstractClientValidationTest {
     @Disabled("Only for PUT/POST - client needs to exist")
     public void clientWithBlankClientIdMatchingPathFails(String protocol) {
     }
+
 }

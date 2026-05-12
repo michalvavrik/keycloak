@@ -19,7 +19,14 @@ package org.keycloak.representations.admin.v2;
 
 import java.util.Objects;
 
+import jakarta.validation.constraints.Size;
+
+import org.keycloak.representations.admin.v2.validation.ValidCanonicalizationMethod;
+import org.keycloak.representations.admin.v2.validation.ValidSignatureAlgorithm;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import com.fasterxml.jackson.annotation.JsonValue;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 /**
@@ -30,8 +37,22 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 public class SAMLClientRepresentation extends BaseClientRepresentation {
     public static final String PROTOCOL = "saml";
 
-    @JsonPropertyDescription("Name ID format to use for the subject (e.g., 'username', 'email', 'transient', 'persistent')")
-    private String nameIdFormat;
+    public enum NameIdFormat {
+        USERNAME, EMAIL, PERSISTENT, TRANSIENT;
+
+        @JsonValue
+        public String toJson() {
+            return name().toLowerCase();
+        }
+
+        @JsonCreator
+        public static NameIdFormat fromJson(String value) {
+            return valueOf(value.toUpperCase());
+        }
+    }
+
+    @JsonPropertyDescription("Name ID format to use for the subject")
+    private NameIdFormat nameIdFormat;
 
     @JsonPropertyDescription("Force the specified Name ID format even if the client requests a different one")
     private Boolean forceNameIdFormat;
@@ -54,12 +75,16 @@ public class SAMLClientRepresentation extends BaseClientRepresentation {
     @JsonPropertyDescription("Use front-channel logout (browser redirect)")
     private Boolean frontChannelLogout;
 
+    @Size(max = 50)
+    @ValidSignatureAlgorithm
     @JsonPropertyDescription("Signature algorithm for signing SAML documents (e.g., 'RSA_SHA256', 'RSA_SHA512')")
     private String signatureAlgorithm;
 
+    @ValidCanonicalizationMethod
     @JsonPropertyDescription("Canonicalization method for XML signatures")
     private String signatureCanonicalizationMethod;
 
+    @Size(max = 65536)
     @JsonPropertyDescription("X.509 certificate for signing (PEM format, without headers)")
     private String signingCertificate;
 
@@ -71,11 +96,11 @@ public class SAMLClientRepresentation extends BaseClientRepresentation {
         return PROTOCOL;
     }
 
-    public String getNameIdFormat() {
+    public NameIdFormat getNameIdFormat() {
         return nameIdFormat;
     }
 
-    public void setNameIdFormat(String nameIdFormat) {
+    public void setNameIdFormat(NameIdFormat nameIdFormat) {
         this.nameIdFormat = nameIdFormat;
     }
 

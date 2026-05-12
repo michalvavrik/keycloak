@@ -273,7 +273,7 @@ public class InteropTest extends AbstractClientApiV2Test {
         v2Client.setAppUrl("http://localhost:9000/saml");
         v2Client.setRedirectUris(Set.of("http://localhost:9000/saml/*"));
         v2Client.setFrontChannelLogout(true);
-        v2Client.setNameIdFormat("email");
+        v2Client.setNameIdFormat(SAMLClientRepresentation.NameIdFormat.EMAIL);
         v2Client.setForceNameIdFormat(true);
         v2Client.setIncludeAuthnStatement(true);
         v2Client.setSignDocuments(true);

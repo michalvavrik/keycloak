@@ -306,7 +306,7 @@ public class ValidationAnnotationScanner {
      * @return map of field name to validation description
      */
     public Map<String, String> buildClassLevelDescriptions(ClassInfo classInfo) {
-        Map<String, String> fieldDescriptions = new HashMap<>();
+        Map<String, List<String>> collected = new HashMap<>();
 
         for (AnnotationInstance annotation : classInfo.annotations()) {
             if (annotation.target().kind() != AnnotationTarget.Kind.CLASS) {
@@ -328,10 +328,16 @@ public class ValidationAnnotationScanner {
             }
 
             for (String affected : affectedFields) {
-                fieldDescriptions.put(affected, context + message);
+                collected.computeIfAbsent(affected, k -> new ArrayList<>()).add(context + message);
             }
         }
 
+        Map<String, String> fieldDescriptions = new HashMap<>();
+        for (var entry : collected.entrySet()) {
+            List<String> descriptions = entry.getValue();
+            descriptions.sort(String::compareTo);
+            fieldDescriptions.put(entry.getKey(), String.join("; ", descriptions));
+        }
         return fieldDescriptions;
     }
 

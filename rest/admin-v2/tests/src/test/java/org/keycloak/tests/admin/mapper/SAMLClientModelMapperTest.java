@@ -126,7 +126,7 @@ public class SAMLClientModelMapperTest {
             SAMLClientModelMapper mapper = getModelMapper(session);
             SAMLClientRepresentation rep = (SAMLClientRepresentation) mapper.fromModel(clientModel);
 
-            assertThat(rep.getNameIdFormat(), is("username"));
+            assertThat(rep.getNameIdFormat(), is(SAMLClientRepresentation.NameIdFormat.USERNAME));
             assertThat(rep.getForceNameIdFormat(), is(true));
         } finally {
             realm.removeClient(clientModel.getId());
@@ -271,7 +271,7 @@ public class SAMLClientModelMapperTest {
             rep.setEnabled(true);
             rep.setClientId("test-saml-tomodel-nameid");
             rep.setRedirectUris(Set.of());
-            rep.setNameIdFormat("email");
+            rep.setNameIdFormat(SAMLClientRepresentation.NameIdFormat.EMAIL);
             rep.setForceNameIdFormat(true);
 
             SAMLClientModelMapper mapper = getModelMapper(session);

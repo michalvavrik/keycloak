@@ -56,7 +56,11 @@ public class SAMLClientModelMapper extends BaseClientModelMapper<SAMLClientRepre
     
     public SAMLClientModelMapper() {
         // Name ID settings
-        addAttributeMapping("nameIdFormat", SAML_NAME_ID_FORMAT, SAMLClientRepresentation::getNameIdFormat, SAMLClientRepresentation::setNameIdFormat);
+        addMapping("nameIdFormat",
+                rep -> rep.getNameIdFormat() != null ? rep.getNameIdFormat().toJson() : null,
+                (rep, value) -> rep.setNameIdFormat(value != null ? SAMLClientRepresentation.NameIdFormat.fromJson(value) : null),
+                model -> model.getAttribute(SAML_NAME_ID_FORMAT),
+                (model, value) -> setAttributeIfNotNull(model, SAML_NAME_ID_FORMAT, value));
         addBooleanAttributeMapping("forceNameIdFormat", SAML_FORCE_NAME_ID_FORMAT, SAMLClientRepresentation::getForceNameIdFormat, SAMLClientRepresentation::setForceNameIdFormat);
         
         // Signature settings

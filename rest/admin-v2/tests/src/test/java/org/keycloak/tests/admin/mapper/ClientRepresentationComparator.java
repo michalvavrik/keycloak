@@ -137,7 +137,8 @@ public class ClientRepresentationComparator {
         Map<String, String> attrs = v1.getAttributes();
         if (attrs == null) return;
 
-        compare("attr[saml_name_id_format]→nameIdFormat", attrs.get(SAML_NAME_ID_FORMAT_ATTRIBUTE), saml.getNameIdFormat());
+        compare("attr[saml_name_id_format]→nameIdFormat", attrs.get(SAML_NAME_ID_FORMAT_ATTRIBUTE),
+                saml.getNameIdFormat() != null ? saml.getNameIdFormat().toJson() : null);
         compareSamlBoolean(SAML_FORCE_NAME_ID_FORMAT_ATTRIBUTE, "forceNameIdFormat", saml.getForceNameIdFormat());
         compareSamlBoolean(SAML_AUTHNSTATEMENT, "includeAuthnStatement", saml.getIncludeAuthnStatement());
         compareSamlBoolean(SAML_SERVER_SIGNATURE, "signDocuments", saml.getSignDocuments());
