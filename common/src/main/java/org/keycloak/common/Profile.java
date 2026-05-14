@@ -137,7 +137,9 @@ public class Profile {
 
         OPENTELEMETRY("OpenTelemetry support", Type.DEFAULT),
         OPENTELEMETRY_LOGS("OpenTelemetry Logs support", Type.PREVIEW, OPENTELEMETRY),
-        OPENTELEMETRY_METRICS("Micrometer to OpenTelemetry bridge support for metrics", Type.EXPERIMENTAL, OPENTELEMETRY),
+        OPENTELEMETRY_METRICS("Micrometer to OpenTelemetry bridge support for metrics", Type.EXPERIMENTAL, 1,
+                () -> isClassAvailable("io.quarkus.micrometer.opentelemetry.runtime.MicrometerOtelBridgeRecorder"),
+                OPENTELEMETRY),
 
         DECLARATIVE_UI("declarative ui spi", Type.EXPERIMENTAL),
 
@@ -579,6 +581,15 @@ public class Profile {
 
         if (!enabledFeaturesOfType.isEmpty()) {
             logger.logv(level, "{0} features enabled: {1}", type.getLabel(), enabledFeaturesOfType);
+        }
+    }
+
+    private static boolean isClassAvailable(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
         }
     }
 
