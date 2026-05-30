@@ -306,14 +306,16 @@ public class LDAPEmbeddedServer {
         ldapServer.setConfidentialityRequired(this.setConfidentialityRequired);
 
         // Read the transports
-        Transport ldap = new TcpTransport(this.bindHost, this.bindPort, 3, 50);
+        TcpTransport ldap = new TcpTransport(this.bindHost, this.bindPort, 3, 50);
+        ldap.setEnabledProtocols(java.util.List.of("TLSv1.3", "TLSv1.2"));
         ldapServer.addTransports( ldap );
         if (enableSSL || enableStartTLS) {
             ldapServer.setKeystoreFile(keystoreFile);
             ldapServer.setCertificatePassword(certPassword);
             if (enableSSL) {
-                Transport ldaps = new TcpTransport(this.bindHost, this.bindLdapsPort, 3, 50);
+                TcpTransport ldaps = new TcpTransport(this.bindHost, this.bindLdapsPort, 3, 50);
                 ldaps.setEnableSSL(true);
+                ldaps.setEnabledProtocols(java.util.List.of("TLSv1.3", "TLSv1.2"));
                 ldapServer.addTransports( ldaps );
                 if (ldaps.isSSLEnabled()) {
                     log.info("Enabled SSL support on the LDAP server.");

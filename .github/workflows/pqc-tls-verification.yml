@@ -1,0 +1,294 @@
+name: PQC TLS Verification
+
+on:
+  push:
+
+concurrency:
+  group: pqc-tls-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_ARGS: >-
+    -B -V -e -ntp
+    --fail-at-end
+    -Dsilent=true
+
+jobs:
+  build:
+    name: Build Keycloak (JDK 27 EA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+        with:
+          create-cache-if-it-doesnt-exist: true
+
+      - name: Build Keycloak
+        run: |
+          ./mvnw clean install -DskipTests -Pdistribution -Poperator
+
+      - name: Compress Maven repo
+        run: tar -C ~/ --use-compress-program zstd -cf m2-keycloak.tzts .m2/repository/org/keycloak
+
+      - name: Upload Maven repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-keycloak
+          path: m2-keycloak.tzts
+          retention-days: 1
+
+      - name: Upload distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: keycloak-dist
+          path: quarkus/dist/target/keycloak-*.tar.gz
+          retention-days: 1
+
+  https-incoming:
+    name: HTTPS Incoming (Vert.x/Netty)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+
+      - name: Download Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-keycloak
+
+      - name: Extract Maven repo
+        run: tar -C ~/ --use-compress-program zstd -xf m2-keycloak.tzts
+
+      - name: Download distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: keycloak-dist
+          path: quarkus/dist/target/
+
+      - name: Run HttpDistTest
+        run: |
+          ./mvnw test $MAVEN_ARGS \
+            -pl quarkus/tests/integration \
+            -Dtest=HttpDistTest
+
+  https-test-framework:
+    name: HTTPS (Test Framework)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+
+      - name: Download Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-keycloak
+
+      - name: Extract Maven repo
+        run: tar -C ~/ --use-compress-program zstd -xf m2-keycloak.tzts
+
+      - name: Run TlsEnabledTest + PqcTlsVerificationTest
+        run: |
+          KC_TEST_SERVER=embedded ./mvnw package $MAVEN_ARGS \
+            -f test-framework/tests/pom.xml \
+            -Dtest=TlsEnabledTest,PqcTlsVerificationTest
+
+  smtp-tls:
+    name: SMTP TLS (GreenMail)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+
+      - name: Download Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-keycloak
+
+      - name: Extract Maven repo
+        run: tar -C ~/ --use-compress-program zstd -xf m2-keycloak.tzts
+
+      - name: Run EmailTest
+        run: |
+          ./mvnw package $MAVEN_ARGS \
+            -f tests/pom.xml \
+            -Dtest=EmailTest
+
+  ldap-tls:
+    name: LDAP TLS (ApacheDS SSL)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+
+      - name: Download Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-keycloak
+
+      - name: Extract Maven repo
+        run: tar -C ~/ --use-compress-program zstd -xf m2-keycloak.tzts
+
+      - name: Run LDAP SSL tests
+        run: |
+          ./mvnw test $MAVEN_ARGS \
+            -Pauth-server-quarkus \
+            -pl testsuite/integration-arquillian/tests/base \
+            -Dtest="LDAPUserLoginTest#loginLDAPUserAuthenticationSimpleEncryptionSSL+loginLDAPUserAuthenticationSimpleEncryptionStartTLS"
+
+  infinispan-mtls:
+    name: Infinispan Cluster mTLS (JGroups)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+
+      - name: Download Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-keycloak
+
+      - name: Extract Maven repo
+        run: tar -C ~/ --use-compress-program zstd -xf m2-keycloak.tzts
+
+      - name: Download distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: keycloak-dist
+          path: quarkus/dist/target/
+
+      - name: Run CacheEmbeddedMtlsDistTest
+        run: |
+          ./mvnw test $MAVEN_ARGS \
+            -pl quarkus/tests/integration \
+            -Dtest=CacheEmbeddedMtlsDistTest
+
+      - name: Run CacheEmbeddedMtlsClusterDistTest
+        run: |
+          ./mvnw test $MAVEN_ARGS \
+            -pl quarkus/tests/integration \
+            -Dtest=CacheEmbeddedMtlsClusterDistTest
+
+  database-tls:
+    name: Database TLS (PostgreSQL)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 27 EA
+        uses: oracle-actions/setup-java@v1
+        with:
+          website: jdk.java.net
+          release: 27
+
+      - name: Enable PQC constraint
+        run: |
+          echo "JAVA_TOOL_OPTIONS=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+          echo "JAVA_OPTS_APPEND=-Djdk.tls.namedGroups=X25519MLKEM768" >> $GITHUB_ENV
+
+      - name: Maven cache
+        uses: ./.github/actions/maven-cache
+
+      - name: Download Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-keycloak
+
+      - name: Extract Maven repo
+        run: tar -C ~/ --use-compress-program zstd -xf m2-keycloak.tzts
+
+      - name: Download distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: keycloak-dist
+          path: quarkus/dist/target/
+
+      - name: Run PostgreSQLPqcTlsDistTest
+        run: |
+          ./mvnw test $MAVEN_ARGS \
+            -pl quarkus/tests/integration \
+            -Dtest=PostgreSQLPqcTlsDistTest \
+            -Dkc.test.storage.database=true

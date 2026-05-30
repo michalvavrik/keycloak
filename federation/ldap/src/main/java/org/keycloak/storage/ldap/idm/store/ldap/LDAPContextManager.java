@@ -100,12 +100,19 @@ public final class LDAPContextManager implements AutoCloseable {
         return vaultSecret.get().orElse(ldapConfig.getBindCredential());
     }
 
+    private static volatile javax.net.ssl.SSLSocket lastStartTlsSocket;
+
+    public static javax.net.ssl.SSLSocket getLastStartTlsSocket() {
+        return lastStartTlsSocket;
+    }
+
     public static StartTlsResponse startTLS(LdapContext ldapContext, SSLSocketFactory sslSocketFactory) throws NamingException {
         StartTlsResponse tls = null;
 
         try {
             tls = (StartTlsResponse) ldapContext.extendedOperation(new StartTlsRequest());
-            tls.negotiate(sslSocketFactory);
+            SSLSocketFactory capturingFactory = sslSocketFactory != null ? new CapturingSSLSocketFactory(sslSocketFactory) : null;
+            tls.negotiate(capturingFactory);
         } catch (Exception e) {
             logger.error("Could not negotiate TLS", e);
             NamingException ne = new AuthenticationException("Could not negotiate TLS");
@@ -233,6 +240,29 @@ public final class LDAPContextManager implements AutoCloseable {
             } catch (NamingException e) {
                 logger.error("Could not close Ldap context.", e);
             }
+        }
+    }
+
+    private static final class CapturingSSLSocketFactory extends SSLSocketFactory {
+        private final SSLSocketFactory delegate;
+
+        CapturingSSLSocketFactory(SSLSocketFactory delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override public String[] getDefaultCipherSuites() { return delegate.getDefaultCipherSuites(); }
+        @Override public String[] getSupportedCipherSuites() { return delegate.getSupportedCipherSuites(); }
+        @Override public java.net.Socket createSocket(java.net.Socket s, String host, int port, boolean autoClose) throws java.io.IOException { return capture(delegate.createSocket(s, host, port, autoClose)); }
+        @Override public java.net.Socket createSocket(String host, int port) throws java.io.IOException { return capture(delegate.createSocket(host, port)); }
+        @Override public java.net.Socket createSocket(String host, int port, java.net.InetAddress localHost, int localPort) throws java.io.IOException { return capture(delegate.createSocket(host, port, localHost, localPort)); }
+        @Override public java.net.Socket createSocket(java.net.InetAddress host, int port) throws java.io.IOException { return capture(delegate.createSocket(host, port)); }
+        @Override public java.net.Socket createSocket(java.net.InetAddress address, int port, java.net.InetAddress localAddress, int localPort) throws java.io.IOException { return capture(delegate.createSocket(address, port, localAddress, localPort)); }
+
+        private java.net.Socket capture(java.net.Socket socket) {
+            if (socket instanceof javax.net.ssl.SSLSocket ssl) {
+                lastStartTlsSocket = ssl;
+            }
+            return socket;
         }
     }
 }

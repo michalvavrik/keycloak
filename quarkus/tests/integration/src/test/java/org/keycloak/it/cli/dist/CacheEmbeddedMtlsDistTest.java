@@ -110,6 +110,8 @@ public class CacheEmbeddedMtlsDistTest {
         var result = runner.run("start-dev", "--cache=ispn", "--cache-embedded-mtls-enabled=true");
         result.assertMessage("JGroups JDBC_PING discovery enabled.");
         result.assertMessage("JGroups Encryption enabled (mTLS).");
+        result.assertMessage("JGroups mTLS server socket: protocols=[TLSv1.3], needClientAuth=true");
+        result.assertMessage("JGroups mTLS named groups: [X25519MLKEM768]");
     }
 
     private void doFileAndPasswordValidation(KeycloakRunner runner, Option<String> fileOption, Option<String> passwordOption) {

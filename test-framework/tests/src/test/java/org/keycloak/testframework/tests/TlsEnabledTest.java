@@ -25,6 +25,9 @@ import org.junit.jupiter.api.Test;
 @KeycloakIntegrationTest
 public class TlsEnabledTest {
 
+    private static final String PQC_HEADER = "X-PQC-Verified";
+    private static final String PQC_NAMED_GROUP = "X25519MLKEM768";
+
     @InjectHttpClient
     HttpClient httpClient;
 
@@ -58,6 +61,7 @@ public class TlsEnabledTest {
         HttpGet req = new HttpGet(baseUrl.toString());
         HttpResponse resp = httpClient.execute(req);
         Assertions.assertEquals(200, resp.getStatusLine().getStatusCode());
+        assertPqcHeader(resp);
     }
 
     @Test
@@ -68,6 +72,13 @@ public class TlsEnabledTest {
     @Test
     public void testOAuthClient() {
         Assertions.assertTrue(oAuthClient.doWellKnownRequest().getTokenEndpoint().startsWith("https://"));
+    }
+
+    private static void assertPqcHeader(HttpResponse resp) {
+        var header = resp.getFirstHeader(PQC_HEADER);
+        Assertions.assertNotNull(header, PQC_HEADER + " header must be present");
+        Assertions.assertEquals(PQC_NAMED_GROUP, header.getValue(),
+                PQC_HEADER + " header must confirm PQC key exchange");
     }
 
     private static class TlsEnabledConfig implements CertificatesConfig {

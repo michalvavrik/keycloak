@@ -46,6 +46,11 @@ public class SSLSocketFactory extends javax.net.ssl.SSLSocketFactory implements 
     private static final Logger log = Logger.getLogger(SSLSocketFactory.class);
 
     private static SSLSocketFactory instance;
+    private static volatile javax.net.ssl.SSLSocket lastLdapsTlsSocket;
+
+    public static javax.net.ssl.SSLSocket getLastLdapsTlsSocket() {
+        return lastLdapsTlsSocket;
+    }
 
     private final javax.net.ssl.SSLSocketFactory sslsf;
 
@@ -84,36 +89,45 @@ public class SSLSocketFactory extends javax.net.ssl.SSLSocketFactory implements 
 
     @Override
     public Socket createSocket(Socket socket, String host, int port, boolean autoClose) throws IOException {
-        return sslsf.createSocket(socket, host, port, autoClose);
+        return captureSession(sslsf.createSocket(socket, host, port, autoClose));
     }
 
     @Override
     public Socket createSocket(String host, int port) throws IOException {
-        return sslsf.createSocket(host, port);
+        return captureSession(sslsf.createSocket(host, port));
     }
 
     @Override
     public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
-        return sslsf.createSocket(host, port, localHost, localPort);
+        return captureSession(sslsf.createSocket(host, port, localHost, localPort));
     }
 
     @Override
     public Socket createSocket(InetAddress host, int port) throws IOException {
-        return sslsf.createSocket(host, port);
+        return captureSession(sslsf.createSocket(host, port));
     }
 
     @Override
     public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
-        return sslsf.createSocket(address, port, localAddress, localPort);
+        return captureSession(sslsf.createSocket(address, port, localAddress, localPort));
     }
 
     @Override
     public Socket createSocket() throws IOException {
-        return sslsf.createSocket();
+        return captureSession(sslsf.createSocket());
     }
 
     @Override
     public int compare(Object socketFactory1, Object socketFactory2) {
         return socketFactory1.equals(socketFactory2) ? 0 : -1;
+    }
+
+    private static Socket captureSession(Socket socket) {
+        if (socket instanceof javax.net.ssl.SSLSocket sslSocket) {
+            sslSocket.addHandshakeCompletedListener(event -> {
+                lastLdapsTlsSocket = (javax.net.ssl.SSLSocket) event.getSocket();
+            });
+        }
+        return socket;
     }
 }

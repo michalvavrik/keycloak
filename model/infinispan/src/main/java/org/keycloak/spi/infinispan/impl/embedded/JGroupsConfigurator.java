@@ -33,6 +33,8 @@ import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 
 import org.keycloak.Config;
@@ -213,19 +215,15 @@ public final class JGroupsConfigurator {
         if (provider == null || !provider.isEnabled()) {
             return;
         }
-        var factory = createSocketFactory(provider);
-        transportOf(holder).addProperty(JGroupsTransport.SOCKET_FACTORY, factory);
-        validateTlsAvailable(holder);
-        logger.info("JGroups Encryption enabled (mTLS).");
-    }
-
-    private static SocketFactory createSocketFactory(JGroupsCertificateProvider provider) {
         try {
             var sslContext = SSLContext.getInstance(TLS_PROTOCOL);
             sslContext.init(new KeyManager[]{provider.keyManager()}, new TrustManager[]{provider.trustManager()}, null);
-            return createFromContext(sslContext);
+            var factory = createFromContext(sslContext);
+            transportOf(holder).addProperty(JGroupsTransport.SOCKET_FACTORY, factory);
+            validateTlsAvailable(holder);
+            logger.infof("JGroups Encryption enabled (mTLS). SocketFactory=%s", factory.getClass().getName());
+            logTlsNamedGroups();
         } catch (KeyManagementException | NoSuchAlgorithmException e) {
-            // we should have valid certificates and keys.
             throw new RuntimeException(e);
         }
     }
@@ -235,7 +233,22 @@ public final class JGroupsConfigurator {
         final SSLParameters serverParameters = new SSLParameters();
         serverParameters.setProtocols(new String[]{TLS_PROTOCOL_VERSION});
         serverParameters.setNeedClientAuth(true);
-        socketFactory.setServerSocketConfigurator(socket -> ((SSLServerSocket) socket).setSSLParameters(serverParameters));
+        socketFactory.setServerSocketConfigurator(socket -> {
+            ((SSLServerSocket) socket).setSSLParameters(serverParameters);
+            SSLServerSocket sslSocket = (SSLServerSocket) socket;
+            logger.infof("JGroups mTLS server socket: protocols=%s, needClientAuth=%s",
+                    Arrays.toString(sslSocket.getEnabledProtocols()), sslSocket.getNeedClientAuth());
+        });
+        socketFactory.setSocketConfigurator(socket -> {
+            if (socket instanceof SSLSocket sslSocket) {
+                sslSocket.addHandshakeCompletedListener(event -> {
+                    SSLSession session = event.getSession();
+                    logger.infof("JGroups mTLS actual session: protocol=%s, cipherSuite=%s",
+                            session.getProtocol(), session.getCipherSuite());
+                    logSocketNamedGroups(sslSocket);
+                });
+            }
+        });
         return socketFactory;
     }
 
@@ -518,6 +531,36 @@ public final class JGroupsConfigurator {
                 }
             }
             return sb.toString();
+        }
+    }
+
+    private static void logSocketNamedGroups(SSLSocket sslSocket) {
+        try {
+            var params = sslSocket.getSSLParameters();
+            var method = params.getClass().getMethod("getNamedGroups");
+            var groups = (String[]) method.invoke(params);
+            if (groups != null) {
+                logger.infof("JGroups mTLS handshake socket named groups: %s", Arrays.toString(groups));
+            }
+        } catch (NoSuchMethodException e) {
+            // JDK < 20, getNamedGroups not available
+        } catch (Exception e) {
+            logger.debug("Could not read TLS named groups from handshake socket", e);
+        }
+    }
+
+    private static void logTlsNamedGroups() {
+        try {
+            var params = SSLContext.getDefault().getDefaultSSLParameters();
+            var method = params.getClass().getMethod("getNamedGroups");
+            var groups = (String[]) method.invoke(params);
+            if (groups != null) {
+                logger.infof("JGroups mTLS named groups: %s", java.util.Arrays.toString(groups));
+            }
+        } catch (NoSuchMethodException e) {
+            // JDK < 20, getNamedGroups not available
+        } catch (Exception e) {
+            logger.debug("Could not read TLS named groups", e);
         }
     }
 }

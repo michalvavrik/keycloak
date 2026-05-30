@@ -55,9 +55,9 @@
         </dependency>
     </dependencies>
 
-    <modules>
+    <!--<modules>
         <module>licenses-processor</module>
-    </modules>
+    </modules>-->
 
     <build>
         <pluginManagement>

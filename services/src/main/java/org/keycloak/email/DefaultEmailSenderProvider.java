@@ -17,12 +17,18 @@
 
 package org.keycloak.email;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
 import java.util.Properties;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 import jakarta.mail.Address;
@@ -58,6 +64,8 @@ public class DefaultEmailSenderProvider implements EmailSenderProvider {
     private static final Logger logger = Logger.getLogger(DefaultEmailSenderProvider.class);
     private static final String SUPPORTED_SSL_PROTOCOLS = getSupportedSslProtocols();
 
+    private static volatile SmtpTlsSessionInfo lastSmtpTlsSessionInfo;
+
     private final Map<EmailAuthenticator.AuthenticatorType, EmailAuthenticator> authenticators;
 
     private final KeycloakSession session;
@@ -92,6 +100,8 @@ public class DefaultEmailSenderProvider implements EmailSenderProvider {
             selectedAuthenticator.connect(this.session, config, transport);
 
             transport.sendMessage(message, new InternetAddress[]{new InternetAddress(convertedAddress)});
+
+            logSmtpTlsSession(session);
 
         } catch (Exception e) {
             ServicesLogger.LOGGER.failedToSendEmail(e);
@@ -320,7 +330,7 @@ public class DefaultEmailSenderProvider implements EmailSenderProvider {
 
         SSLSocketFactory factory = configurator.getSSLSocketFactory();
         if (factory != null) {
-            props.put("mail.smtp.ssl.socketFactory", factory);
+            props.put("mail.smtp.ssl.socketFactory", new TlsSessionCapturingSSLSocketFactory(factory));
             if (configurator.getProvider().getPolicy() == HostnameVerificationPolicy.ANY) {
                 props.setProperty("mail.smtp.ssl.trust", "*");
                 props.put("mail.smtp.ssl.checkserveridentity", Boolean.FALSE.toString()); // this should be the default but seems to be impl specific, so set it explicitly just to be sure
@@ -328,6 +338,44 @@ public class DefaultEmailSenderProvider implements EmailSenderProvider {
                 props.put("mail.smtp.ssl.checkserveridentity", Boolean.TRUE.toString());
             }
         }
+    }
+
+    public static SmtpTlsSessionInfo getLastSmtpTlsSessionInfo() {
+        return lastSmtpTlsSessionInfo;
+    }
+
+    private static void logSmtpTlsSession(Session mailSession) {
+        Object factoryObj = mailSession.getProperties().get("mail.smtp.ssl.socketFactory");
+        if (!(factoryObj instanceof TlsSessionCapturingSSLSocketFactory capturingFactory)) {
+            return;
+        }
+
+        SSLSocket sslSocket = capturingFactory.getLastSocket();
+        if (sslSocket == null) {
+            return;
+        }
+
+        SSLSession sslSession = sslSocket.getSession();
+        String[] namedGroups = getNamedGroupsFromSocket(sslSocket);
+        String namedGroupsInfo = namedGroups != null ? Arrays.toString(namedGroups) : "null";
+        logger.infof("SMTP TLS session: protocol=%s, valid=%s, namedGroups=%s",
+                sslSession.getProtocol(), sslSession.isValid(), namedGroupsInfo);
+
+        lastSmtpTlsSessionInfo = new SmtpTlsSessionInfo(
+                sslSession.getProtocol(), sslSession.isValid(), namedGroups);
+    }
+
+    private static String[] getNamedGroupsFromSocket(SSLSocket socket) {
+        try {
+            var params = socket.getSSLParameters();
+            var method = params.getClass().getMethod("getNamedGroups");
+            return (String[]) method.invoke(params);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public record SmtpTlsSessionInfo(String protocol, boolean valid, String[] namedGroups) {
     }
 
     @Override
@@ -345,6 +393,85 @@ public class DefaultEmailSenderProvider implements EmailSenderProvider {
             logger.warn("Failed to get list of supported SSL protocols", e);
         }
         return null;
+    }
+
+    static final class TlsSessionCapturingSSLSocketFactory extends SSLSocketFactory {
+
+        private final SSLSocketFactory delegate;
+        private volatile SSLSocket lastSocket;
+
+        TlsSessionCapturingSSLSocketFactory(SSLSocketFactory delegate) {
+            this.delegate = delegate;
+        }
+
+        SSLSocket getLastSocket() {
+            return lastSocket;
+        }
+
+        private Socket capture(Socket socket) {
+            if (socket instanceof SSLSocket ssl) {
+                lastSocket = ssl;
+                constrainToPqcNamedGroups(ssl);
+            }
+            return socket;
+        }
+
+        private static void constrainToPqcNamedGroups(SSLSocket ssl) {
+            String namedGroups = System.getProperty("jdk.tls.namedGroups");
+            if (namedGroups == null) {
+                return;
+            }
+            try {
+                var params = ssl.getSSLParameters();
+                var method = params.getClass().getMethod("setNamedGroups", String[].class);
+                method.invoke(params, (Object) namedGroups.split(","));
+                ssl.setSSLParameters(params);
+            } catch (NoSuchMethodException e) {
+                // JDK < 20
+            } catch (Exception e) {
+                logger.debug("Could not constrain SMTP TLS named groups", e);
+            }
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
+            return capture(delegate.createSocket(s, host, port, autoClose));
+        }
+
+        @Override
+        public Socket createSocket(String host, int port) throws IOException {
+            return capture(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+            return capture(delegate.createSocket(host, port, localHost, localPort));
+        }
+
+        @Override
+        public Socket createSocket(InetAddress host, int port) throws IOException {
+            return capture(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+            return capture(delegate.createSocket(address, port, localAddress, localPort));
+        }
+
+        @Override
+        public Socket createSocket() throws IOException {
+            return capture(delegate.createSocket());
+        }
     }
 
 }

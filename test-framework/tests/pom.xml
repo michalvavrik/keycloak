@@ -32,6 +32,10 @@
     <packaging>jar</packaging>
     <description>Tests testing the new test framework functionality</description>
 
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+    </properties>
+
     <dependencyManagement>
         <dependencies>
             <dependency>

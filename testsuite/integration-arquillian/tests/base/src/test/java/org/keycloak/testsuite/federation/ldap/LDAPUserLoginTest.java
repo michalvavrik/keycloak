@@ -240,8 +240,10 @@ public class LDAPUserLoginTest extends AbstractLDAPTest {
     @Test
     @LDAPConnectionParameters(bindType=LDAPConnectionParameters.BindType.SIMPLE, encryption=LDAPConnectionParameters.Encryption.SSL)
     public void loginLDAPUserAuthenticationSimpleEncryptionSSL() {
+        assertPqcConstraintActive();
         verifyConnectionUrlProtocolPrefix("ldaps://");
         runLDAPLoginTest();
+        assertLdapsTlsSession();
     }
 
     // Check LDAP federated user (in)valid login(s) with simple authentication & SSL encryption enabled
@@ -258,8 +260,10 @@ public class LDAPUserLoginTest extends AbstractLDAPTest {
     @Test
     @LDAPConnectionParameters(bindType=LDAPConnectionParameters.BindType.SIMPLE, encryption=LDAPConnectionParameters.Encryption.STARTTLS)
     public void loginLDAPUserAuthenticationSimpleEncryptionStartTLS() {
+        assertPqcConstraintActive();
         verifyConnectionUrlProtocolPrefix("ldap://");
         runLDAPLoginTest();
+        assertStartTlsSession();
     }
 
     // Check LDAP federated user (in)valid login(s) with simple authentication & startTLS encryption enabled
@@ -350,5 +354,64 @@ public class LDAPUserLoginTest extends AbstractLDAPTest {
 
         // attempt to login again with the deleted user should fail with the proper message.
         this.verifyLoginFailed("janedoe", DEFAULT_TEST_USERS.get("VALID_USER_PASSWORD"));
+    }
+
+    private static void assertPqcConstraintActive() {
+        Assertions.assertEquals("X25519MLKEM768", System.getProperty("jdk.tls.namedGroups"),
+                "PQC named group constraint must be X25519MLKEM768");
+    }
+
+    private void assertStartTlsSession() {
+        getTestingClient().server().run(session -> {
+            javax.net.ssl.SSLSocket socket =
+                    org.keycloak.storage.ldap.idm.store.ldap.LDAPContextManager.getLastStartTlsSocket();
+            if (socket == null) {
+                throw new AssertionError("StartTLS SSLSocket must be captured in the server process");
+            }
+            javax.net.ssl.SSLSession tlsSession = socket.getSession();
+            if (!"TLSv1.3".equals(tlsSession.getProtocol())) {
+                throw new AssertionError("StartTLS must use TLS 1.3, got: " + tlsSession.getProtocol());
+            }
+            try {
+                java.lang.reflect.Method getNamedGroups = socket.getSSLParameters().getClass().getMethod("getNamedGroups");
+                String[] groups = (String[]) getNamedGroups.invoke(socket.getSSLParameters());
+                if (groups == null || groups.length != 1 || !"X25519MLKEM768".equals(groups[0])) {
+                    throw new AssertionError("StartTLS socket named groups must be [X25519MLKEM768], got: " + java.util.Arrays.toString(groups));
+                }
+            } catch (NoSuchMethodException e) {
+                throw new AssertionError("getNamedGroups() not available — JDK < 20");
+            } catch (AssertionError e) {
+                throw e;
+            } catch (Exception e) {
+                throw new AssertionError("Failed to check StartTLS named groups", e);
+            }
+        });
+    }
+
+    private void assertLdapsTlsSession() {
+        getTestingClient().server().run(session -> {
+            javax.net.ssl.SSLSocket socket =
+                    org.keycloak.truststore.SSLSocketFactory.getLastLdapsTlsSocket();
+            if (socket == null) {
+                throw new AssertionError("LDAPS SSLSocket must be captured in the server process");
+            }
+            javax.net.ssl.SSLSession tlsSession = socket.getSession();
+            if (!"TLSv1.3".equals(tlsSession.getProtocol())) {
+                throw new AssertionError("LDAPS must use TLS 1.3, got: " + tlsSession.getProtocol());
+            }
+            try {
+                java.lang.reflect.Method getNamedGroups = socket.getSSLParameters().getClass().getMethod("getNamedGroups");
+                String[] groups = (String[]) getNamedGroups.invoke(socket.getSSLParameters());
+                if (groups == null || groups.length != 1 || !"X25519MLKEM768".equals(groups[0])) {
+                    throw new AssertionError("LDAPS socket named groups must be [X25519MLKEM768], got: " + java.util.Arrays.toString(groups));
+                }
+            } catch (NoSuchMethodException e) {
+                throw new AssertionError("getNamedGroups() not available — JDK < 20");
+            } catch (AssertionError e) {
+                throw e;
+            } catch (Exception e) {
+                throw new AssertionError("Failed to check LDAPS named groups", e);
+            }
+        });
     }
 }

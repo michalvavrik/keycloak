@@ -36,11 +36,14 @@ import org.keycloak.it.utils.RawKeycloakDistribution;
 import io.quarkus.test.junit.main.Launch;
 import org.junit.jupiter.api.Test;
 
+import io.restassured.response.Response;
+
 import static io.restassured.RestAssured.given;
 import static io.restassured.RestAssured.when;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * @author Vaclav Muzikar <vmuzikar@redhat.com>
@@ -73,6 +76,7 @@ public class HttpDistTest {
     @Launch({"start-dev", "--log-level=INFO,org.keycloak.quarkus.runtime.services.RejectNonNormalizedPathFilter:debug", "--http-access-log-enabled=true"})
     public void preventNonNormalizedURLs() {
         when().get("/realms/master").then().statusCode(200);
+        assertPqcHeader();
         when().get("/realms/xxx/../master").then().statusCode(400);
         given().urlEncodingEnabled(false)
                 .when().get("/realms/master;xxx").then().statusCode(400);
@@ -128,5 +132,12 @@ public class HttpDistTest {
         // Test that negative values are rejected
         CLIResult result = runner.run("start-dev", "--shutdown-delay=-1s");
         result.assertError("Invalid duration '-1s'. Duration must be zero or positive");
+    }
+
+    private static void assertPqcHeader() {
+        Response response = given().relaxedHTTPSValidation().when().get("https://localhost:8443/realms/master");
+        response.then().statusCode(200);
+        assertEquals("X25519MLKEM768", response.header("X-PQC-Verified"),
+                "Server must confirm PQC hybrid key exchange via X-PQC-Verified header");
     }
 }
