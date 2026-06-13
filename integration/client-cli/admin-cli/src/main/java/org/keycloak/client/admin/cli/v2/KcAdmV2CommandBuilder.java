@@ -17,15 +17,21 @@ import static org.keycloak.client.admin.cli.KcAdmMain.CMD;
 import static org.keycloak.client.admin.cli.KcAdmMain.V2_FLAG;
 import static org.keycloak.common.util.ObjectUtil.capitalize;
 
-class KcAdmV2CommandBuilder {
+final class KcAdmV2CommandBuilder {
 
     private static final String OPT_HELP = "--help";
     static final String OPT_FILE = "-f";
     static final String OPT_COMPRESSED = "--compressed";
-    private static final String CONNECTION_OPTIONS_HEADING = "%nConnection options:%n";
     private static final String CMD_EDIT = "edit";
+    private static final String CONNECTION_OPTIONS_HINT = " [CONNECTION OPTIONS]";
 
-    static void addCommands(CommandLine cli, KcAdmV2CommandDescriptor descriptor) {
+    private final KcAdmV2Cmd root;
+
+    KcAdmV2CommandBuilder(KcAdmV2Cmd root) {
+        this.root = root;
+    }
+
+    void addCommands(CommandLine cli, KcAdmV2CommandDescriptor descriptor) {
         for (ResourceDescriptor resource : descriptor.getResources()) {
             GroupCommand groupCommand = new GroupCommand(resource.getName());
             CommandSpec groupSpec = CommandSpec.wrapWithoutInspection(groupCommand);
@@ -52,11 +58,12 @@ class KcAdmV2CommandBuilder {
                 groupCli.addSubcommand(CMD_EDIT, buildEditCommand(getDescriptor, putDescriptor));
             }
 
+            setConnectionOptionsSynopsis(groupCli);
             cli.addSubcommand(resource.getName(), groupCli);
         }
     }
 
-    private static CommandLine buildSubcommand(CommandDescriptor cmd) {
+    private CommandLine buildSubcommand(CommandDescriptor cmd) {
         if (cmd.hasVariants()) {
             return buildVariantParentCommand(cmd);
         }
@@ -64,7 +71,7 @@ class KcAdmV2CommandBuilder {
         return buildLeafCommand(cmd, cmd.getOptions(), null);
     }
 
-    private static CommandLine buildVariantParentCommand(CommandDescriptor cmd) {
+    private CommandLine buildVariantParentCommand(CommandDescriptor cmd) {
         CommandLine parentCli = buildLeafCommand(cmd, null, null);
 
         for (VariantDescriptor variant : cmd.getVariants()) {
@@ -75,19 +82,13 @@ class KcAdmV2CommandBuilder {
         return parentCli;
     }
 
-    private static CommandLine buildLeafCommand(CommandDescriptor cmd,
+    private CommandLine buildLeafCommand(CommandDescriptor cmd,
             List<OptionDescriptor> options, VariantDescriptor variant) {
         boolean isVariantParent = variant == null && cmd.hasVariants();
 
-        KcAdmV2RequestExecutor executor = new KcAdmV2RequestExecutor(cmd, variant);
-        CommandSpec spec = CommandSpec.forAnnotatedObject(executor);
+        CommandSpec spec = new KcAdmV2RequestExecutor(root, cmd, variant).getSpec();
         spec.name(variant != null ? variant.getName() : cmd.getName());
         spec.usageMessage().description(cmd.getDescription());
-        spec.usageMessage().optionListHeading(CONNECTION_OPTIONS_HEADING);
-
-        // Replace inherited --help with usageHelp=true so PicoCLI skips
-        // required parameter validation when --help is present
-        spec.remove(spec.findOption(OPT_HELP));
         addHelpOption(spec);
 
         if (cmd.isHasResponseBody()) {
@@ -154,16 +155,12 @@ class KcAdmV2CommandBuilder {
                 .build();
     }
 
-    private static CommandLine buildEditCommand(CommandDescriptor getCmd, CommandDescriptor putCmd) {
+    private CommandLine buildEditCommand(CommandDescriptor getCmd, CommandDescriptor putCmd) {
         String resourceName = getCmd.getResourceName();
 
-        KcAdmV2EditCmd executor = new KcAdmV2EditCmd(getCmd, putCmd);
-        CommandSpec spec = CommandSpec.forAnnotatedObject(executor);
+        CommandSpec spec = new KcAdmV2EditCmd(root, getCmd, putCmd).getSpec();
         spec.name(CMD_EDIT);
         spec.usageMessage().description(KcAdmV2EditCmd.createDescription(resourceName));
-        spec.usageMessage().optionListHeading(CONNECTION_OPTIONS_HEADING);
-
-        spec.remove(spec.findOption(OPT_HELP));
         addHelpOption(spec);
         addOutputGroup(spec);
         addIdPositional(spec, resourceName);
@@ -192,6 +189,20 @@ class KcAdmV2CommandBuilder {
                         .description("Don't pretty print the output")
                         .build())
                 .build());
+    }
+
+    private static void setConnectionOptionsSynopsis(CommandLine cli) {
+        String rootName = CMD + " " + V2_FLAG + CONNECTION_OPTIONS_HINT;
+        setConnectionOptionsSynopsis(cli, rootName);
+    }
+
+    private static void setConnectionOptionsSynopsis(CommandLine cli, String parentPath) {
+        String name = cli.getCommandName();
+        String fullPath = parentPath + " " + name;
+        cli.getCommandSpec().usageMessage().customSynopsis(fullPath + " [OPTIONS]");
+        for (CommandLine sub : cli.getSubcommands().values()) {
+            setConnectionOptionsSynopsis(sub, fullPath);
+        }
     }
 
     private static void addHelpOption(CommandSpec spec) {

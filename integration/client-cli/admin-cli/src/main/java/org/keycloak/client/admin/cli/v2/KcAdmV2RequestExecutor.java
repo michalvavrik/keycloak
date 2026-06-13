@@ -17,6 +17,7 @@ import org.keycloak.client.admin.cli.commands.AbstractTargetAuthOptionsCmd;
 import org.keycloak.client.admin.cli.v2.KcAdmV2CommandDescriptor.CommandDescriptor;
 import org.keycloak.client.admin.cli.v2.KcAdmV2CommandDescriptor.OptionDescriptor;
 import org.keycloak.client.admin.cli.v2.KcAdmV2CommandDescriptor.VariantDescriptor;
+import org.keycloak.client.cli.common.BaseAuthOptionsCmd;
 import org.keycloak.client.cli.common.Globals;
 import org.keycloak.client.cli.config.ConfigData;
 import org.keycloak.client.cli.config.FileConfigHandler;
@@ -32,9 +33,7 @@ import org.keycloak.util.JsonSerialization;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.http.HttpHeaders;
 import picocli.CommandLine;
-import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
 
 import static org.keycloak.client.cli.util.ConfigUtil.credentialsAvailable;
 import static org.keycloak.client.cli.util.ConfigUtil.loadConfig;
@@ -42,8 +41,7 @@ import static org.keycloak.client.cli.util.HttpUtil.APPLICATION_JSON;
 import static org.keycloak.client.cli.util.IoUtil.readFully;
 import static org.keycloak.common.util.ObjectUtil.capitalize;
 
-@Command
-class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
+class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd implements Runnable {
 
     static final String MERGE_PATCH_JSON = "application/merge-patch+json";
     static final String API_VERSION = "v2";
@@ -55,12 +53,15 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
             "client", "clientId"
     );
 
-    @Spec CommandSpec spec;
+    protected final CommandSpec spec;
+    protected final BaseAuthOptionsCmd root;
     private final CommandDescriptor descriptor;
     private final VariantDescriptor variant;
 
-    KcAdmV2RequestExecutor(CommandDescriptor descriptor, VariantDescriptor variant) {
+    KcAdmV2RequestExecutor(BaseAuthOptionsCmd root, CommandDescriptor descriptor, VariantDescriptor variant) {
         super();
+        this.spec = CommandSpec.wrapWithoutInspection(this);
+        this.root = root;
         this.descriptor = descriptor;
         this.variant = variant;
     }
@@ -158,6 +159,7 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
             return;
         }
 
+        initFromParent(root);
         PrintWriter out = spec.commandLine().getOut();
 
         try {
@@ -359,5 +361,9 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
         } catch (Exception e) {
             throw new RuntimeException("Error processing results: " + e.getMessage(), e);
         }
+    }
+
+    final CommandSpec getSpec() {
+        return spec;
     }
 }

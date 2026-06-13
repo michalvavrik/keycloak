@@ -19,9 +19,9 @@ abstract class AbstractKcAdmV2CLITest {
 
     protected CommandResult kcAdmV2Cmd(Path cacheDir, String configFile, String... args) {
         String[] fullArgs = new String[args.length + 2];
-        System.arraycopy(args, 0, fullArgs, 0, args.length);
-        fullArgs[args.length] = "--config";
-        fullArgs[args.length + 1] = configFile;
+        fullArgs[0] = "--config";
+        fullArgs[1] = configFile;
+        System.arraycopy(args, 0, fullArgs, 2, args.length);
 
         KcAdmV2Cmd cmd = cacheDir != null ? new KcAdmV2Cmd(cacheDir, fullArgs) : new KcAdmV2Cmd(fullArgs);
         return execute(cmd, fullArgs);
@@ -29,8 +29,8 @@ abstract class AbstractKcAdmV2CLITest {
 
     protected CommandResult kcAdmV2CmdNoConfig(String... args) {
         String[] fullArgs = new String[args.length + 1];
-        System.arraycopy(args, 0, fullArgs, 0, args.length);
-        fullArgs[args.length] = "--no-config";
+        fullArgs[0] = "--no-config";
+        System.arraycopy(args, 0, fullArgs, 1, args.length);
 
         return execute(new KcAdmV2Cmd(fullArgs), fullArgs);
     }

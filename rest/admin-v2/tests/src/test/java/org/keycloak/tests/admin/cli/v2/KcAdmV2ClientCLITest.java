@@ -184,13 +184,13 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
         // Config login is for master — targeting another realm should work (master can manage other realms)
         assertThat("managed realm should not be master", realm.getName(), is(not("master")));
 
-        CommandResult result = kcAdmV2Cmd("client", "create", "oidc",
-                "-r", realm.getName(),
+        CommandResult result = kcAdmV2Cmd("-r", realm.getName(),
+                "client", "create", "oidc",
                 "--client-id", "test-in-other-realm");
         assertThat("create in other realm should succeed: " + result.err(),
                 result.exitCode(), is(0));
 
-        CommandResult listResult = kcAdmV2Cmd("client", "list", "-r", realm.getName(), "-c");
+        CommandResult listResult = kcAdmV2Cmd("-r", realm.getName(), "client", "list", "-c");
         assertThat("list should succeed", listResult.exitCode(), is(0));
         assertThat(listResult.out(), containsString("test-in-other-realm"));
 
@@ -205,11 +205,12 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
         // should fail — proving --realm is actually used for auth, not just the request URL.
         assertThat("managed realm should not be master", realm.getName(), is(not("master")));
 
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--client", Config.getAdminClientId(),
                 "--secret", Config.getAdminClientSecret(),
-                "--realm", realm.getName());
+                "--realm", realm.getName(),
+                "client", "list", "-c");
         assertThat("should fail because admin client doesn't exist in non-master realm",
                 result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("invalid_client"));
@@ -217,10 +218,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInlineAuthWithClientSecret() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--client", Config.getAdminClientId(),
-                "--secret", Config.getAdminClientSecret());
+                "--secret", Config.getAdminClientSecret(),
+                "client", "list", "-c");
 
         assertThat("inline auth with secret should succeed: " + result.err(),
                 result.exitCode(), is(0));
@@ -230,10 +232,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInlineAuthWithWrongSecret() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--client", Config.getAdminClientId(),
-                "--secret", "wrong-secret");
+                "--secret", "wrong-secret",
+                "client", "list", "-c");
 
         assertThat("wrong secret should fail", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("unauthorized_client"));
@@ -241,10 +244,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInlineAuthWithUserPassword() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--user", Config.getAdminUsername(),
-                "--password", Config.getAdminPassword());
+                "--password", Config.getAdminPassword(),
+                "client", "list", "-c");
 
         assertThat("inline auth with user/password should succeed: " + result.err(),
                 result.exitCode(), is(0));
@@ -254,10 +258,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInlineAuthWithWrongPassword() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--user", Config.getAdminUsername(),
-                "--password", "wrong-password");
+                "--password", "wrong-password",
+                "client", "list", "-c");
 
         assertThat("wrong password should fail", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("Invalid user credentials"));
@@ -265,8 +270,8 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInlineAuthWithToken() {
-        CommandResult result = kcAdmV2Cmd("client", "list", "-c",
-                "--token", getTokenFromConfig());
+        CommandResult result = kcAdmV2Cmd("--token", getTokenFromConfig(),
+                "client", "list", "-c");
 
         assertThat("inline auth with token should succeed: " + result.err(),
                 result.exitCode(), is(0));
@@ -276,8 +281,8 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInlineAuthWithWrongToken() {
-        CommandResult result = kcAdmV2Cmd("client", "list", "-c",
-                "--token", "invalid-token-value");
+        CommandResult result = kcAdmV2Cmd("--token", "invalid-token-value",
+                "client", "list", "-c");
 
         assertThat("wrong token should fail", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("401"));
@@ -286,8 +291,9 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testInlineTokenWithoutServerFails() {
         // No config, no --server — should fail because server URL is unknown
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
-                "--token", getTokenFromConfig());
+        CommandResult result = kcAdmV2CmdNoConfig(
+                "--token", getTokenFromConfig(),
+                "client", "list", "-c");
 
         assertThat("token without server should fail", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("No server URL configured"));
@@ -296,9 +302,10 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testInlineServerOverridesConfig() {
         // Config has a valid server, but we override with a wrong one
-        CommandResult result = kcAdmV2Cmd("client", "list", "-c",
+        CommandResult result = kcAdmV2Cmd(
                 "--server", "http://localhost:1/nonexistent",
-                "--token", getTokenFromConfig());
+                "--token", getTokenFromConfig(),
+                "client", "list", "-c");
 
         assertThat("overridden server should be used and fail", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("Connection refused"));
@@ -308,9 +315,10 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     void testInlineUserPasswordOverridesSavedToken() {
         // Config has a valid saved token, but wrong inline credentials should cause failure,
         // proving the inline auth path is taken instead of using the saved token
-        CommandResult result = kcAdmV2Cmd("client", "list", "-c",
+        CommandResult result = kcAdmV2Cmd(
                 "--user", "nonexistent-user",
-                "--password", "wrong-password");
+                "--password", "wrong-password",
+                "client", "list", "-c");
 
         assertThat("inline credentials should override saved token", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("Invalid user credentials"));
@@ -319,9 +327,10 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testUserWithoutPasswordPromptsInNonInteractive() {
         // In test environment System.console() is null, so prompting fails with a clear message
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
-                "--user", Config.getAdminUsername());
+                "--user", Config.getAdminUsername(),
+                "client", "list", "-c");
 
         assertThat("should fail when password can't be prompted",
                 result.exitCode(), is(not(0)));
@@ -331,9 +340,10 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testClientWithoutSecretFails() {
         // --client without --secret or --user doesn't trigger inline auth — server rejects with 401
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
-                "--client", Config.getAdminClientId());
+                "--client", Config.getAdminClientId(),
+                "client", "list", "-c");
 
         assertThat("should fail without credentials",
                 result.exitCode(), is(not(0)));
@@ -342,8 +352,9 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testNoConfigAndConfigMutuallyExclusive() {
-        CommandResult result = kcAdmV2CmdRaw("client", "list", "-c",
-                "--no-config", "--config", "/some/path");
+        CommandResult result = kcAdmV2CmdRaw(
+                "--no-config", "--config", "/some/path",
+                "client", "list", "-c");
 
         assertThat("--no-config and --config should be mutually exclusive",
                 result.exitCode(), is(not(0)));
@@ -352,10 +363,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testKeystoreAndSecretMutuallyExclusive() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--keystore", "/some/keystore.jks",
-                "--secret", "some-secret");
+                "--secret", "some-secret",
+                "client", "list", "-c");
 
         assertThat("--keystore and --secret should be mutually exclusive",
                 result.exitCode(), is(not(0)));
@@ -364,10 +376,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testKeystoreFileNotFound() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--keystore", "/nonexistent/keystore.jks",
-                "--storepass", "password");
+                "--storepass", "password",
+                "client", "list", "-c");
 
         assertThat("non-existent keystore should fail", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("No such keystore file"));
@@ -376,8 +389,9 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testTlsOptionsIgnoredForHttp() {
         // TLS options should be silently ignored for non-HTTPS server URLs
-        CommandResult result = kcAdmV2Cmd("client", "list", "-c",
-                "--truststore", "/nonexistent/truststore.jks");
+        CommandResult result = kcAdmV2Cmd(
+                "--truststore", "/nonexistent/truststore.jks",
+                "client", "list", "-c");
 
         assertThat("should succeed (truststore ignored for HTTP): " + result.err(),
                 result.exitCode(), is(0));
@@ -387,8 +401,9 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
 
     @Test
     void testInvalidServerUrl() {
-        CommandResult result = kcAdmV2CmdNoConfig("client", "create", "saml",
-                "--server", "blab", "--token", "sh");
+        CommandResult result = kcAdmV2CmdNoConfig(
+                "--server", "blab", "--token", "sh",
+                "client", "create", "saml");
 
         assertThat("should fail gracefully", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("Invalid server URL"));
@@ -407,8 +422,9 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testServerAndRealmWithoutCredentialsFails() {
         // --server and --realm provided but no credentials — server rejects with 401
-        CommandResult result = kcAdmV2CmdNoConfig("client", "create", "saml",
-                "--server", keycloakUrls.getBase(), "--realm", "master");
+        CommandResult result = kcAdmV2CmdNoConfig(
+                "--server", keycloakUrls.getBase(), "--realm", "master",
+                "client", "create", "saml");
 
         assertThat("should fail without credentials", result.exitCode(), is(not(0)));
         assertThat(result.err(), containsString("HTTP 401 Unauthorized"));
@@ -419,11 +435,12 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
         // Auth against master (default), target another realm with -r
         assertThat("managed realm should not be master", realm.getName(), is(not("master")));
 
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--client", Config.getAdminClientId(),
                 "--secret", Config.getAdminClientSecret(),
-                "-r", realm.getName());
+                "-r", realm.getName(),
+                "client", "list", "-c");
 
         assertThat("should succeed targeting other realm with master auth: " + result.err(),
                 result.exitCode(), is(0));
@@ -435,10 +452,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
     @Test
     void testDefaultRealmIsMaster() {
         // No --realm passed, no config realm — should default to master
-        CommandResult result = kcAdmV2CmdNoConfig("client", "list", "-c",
+        CommandResult result = kcAdmV2CmdNoConfig(
                 "--server", keycloakUrls.getBase(),
                 "--client", Config.getAdminClientId(),
-                "--secret", Config.getAdminClientSecret());
+                "--secret", Config.getAdminClientSecret(),
+                "client", "list", "-c");
 
         assertThat("should succeed with default master realm: " + result.err(),
                 result.exitCode(), is(0));
@@ -453,10 +471,11 @@ public class KcAdmV2ClientCLITest extends AbstractKcAdmV2CLITest {
         // The admin client only exists in master, so this should fail.
         assertThat("managed realm should not be master", realm.getName(), is(not("master")));
 
-        CommandResult result = kcAdmV2Cmd("client", "list", "-c",
+        CommandResult result = kcAdmV2Cmd(
                 "--realm", realm.getName(),
                 "--client", Config.getAdminClientId(),
-                "--secret", Config.getAdminClientSecret());
+                "--secret", Config.getAdminClientSecret(),
+                "client", "list", "-c");
 
         assertThat("should fail because admin client doesn't exist in non-master realm",
                 result.exitCode(), is(not(0)));

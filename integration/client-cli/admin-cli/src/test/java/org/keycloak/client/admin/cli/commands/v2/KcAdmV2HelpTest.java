@@ -7,6 +7,7 @@ import java.io.StringWriter;
 import java.util.List;
 
 import org.keycloak.client.admin.cli.KcAdmMain;
+import org.keycloak.client.admin.cli.commands.ConfigCmd;
 import org.keycloak.client.admin.cli.v2.KcAdmV2Cmd;
 import org.keycloak.client.cli.common.BaseConfigCredentialsCmd;
 import org.keycloak.client.cli.common.Globals;
@@ -215,46 +216,60 @@ public class KcAdmV2HelpTest {
     }
 
     @Test
-    public void testConnectionOptionsOnSubcommand() {
+    public void testLeafDoesNotHaveConnectionOptions() {
         String help = getSubcommandHelp("client", "list");
-        assertTrue("should have 'Connection options:' heading", help.contains("Connection options:"));
-        assertTrue("should have --config", help.contains("--config"));
-        assertTrue("should have -r", help.contains("-r"));
-        assertTrue("should have --target-realm", help.contains("--target-realm"));
-        assertTrue("should have --realm", help.contains("--realm"));
-        assertTrue("should have --token", help.contains("--token"));
-        assertTrue("should have --truststore", help.contains("--truststore"));
-        assertTrue("should have --trustpass", help.contains("--trustpass"));
-        assertTrue("should have --insecure", help.contains("--insecure"));
+        assertFalse("leaf should not have 'Connection options:' heading", help.contains("Connection options:"));
+        assertFalse("leaf should not have --config", help.contains("--config"));
+        assertFalse("leaf should not have -r", help.contains("-r,"));
+        assertFalse("leaf should not have --target-realm", help.contains("--target-realm"));
+        assertFalse("leaf should not have --realm", help.contains("--realm"));
+        assertFalse("leaf should not have --token", help.contains("--token"));
+        assertFalse("leaf should not have --truststore", help.contains("--truststore"));
+        assertFalse("leaf should not have --trustpass", help.contains("--trustpass"));
+        assertFalse("leaf should not have --insecure", help.contains("--insecure"));
     }
 
     @Test
-    public void testKeystoreOptionsAvailable() {
+    public void testLeafDoesNotHaveKeystoreOptions() {
         String help = getSubcommandHelp("client", "list");
-        assertTrue("should have --keystore", help.contains("--keystore"));
-        assertTrue("should have --storepass", help.contains("--storepass"));
-        assertTrue("should have --keypass", help.contains("--keypass"));
-        assertTrue("should have --alias", help.contains("--alias"));
-        assertTrue("--storepass should mention KC_CLI_STORE_PASSWORD", help.contains("KC_CLI_STORE_PASSWORD"));
+        assertFalse("leaf should not have --keystore", help.contains("--keystore"));
+        assertFalse("leaf should not have --storepass", help.contains("--storepass"));
+        assertFalse("leaf should not have --keypass", help.contains("--keypass"));
+        assertFalse("leaf should not have --alias", help.contains("--alias"));
+        assertFalse("leaf should not mention KC_CLI_STORE_PASSWORD", help.contains("KC_CLI_STORE_PASSWORD"));
     }
 
     @Test
-    public void testNoConfigOptionAvailable() {
+    public void testLeafDoesNotHaveConfigOptions() {
         String help = getSubcommandHelp("client", "list");
-        assertTrue("should have --no-config", help.contains("--no-config"));
-        assertTrue("should describe no-config purpose", help.contains("Don't use config file"));
+        assertFalse("leaf should not have --no-config", help.contains("--no-config"));
+        assertFalse("leaf should not describe no-config purpose", help.contains("Don't use config file"));
     }
 
     @Test
-    public void testPasswordDescriptionMentionsEnvVar() {
-        String help = getSubcommandHelp("client", "list");
+    public void testRootHelpShowsConnectionOptions() {
+        String help = createCli().getUsageMessage();
+        assertTrue("root should have 'Connection options:'", help.contains("Connection options:"));
+        assertTrue("root should have --server", help.contains("--server"));
+        assertTrue("root should have --realm", help.contains("--realm"));
+        assertTrue("root should have --config", help.contains("--config"));
+        assertTrue("root should have --token", help.contains("--token"));
+        assertTrue("root should have --user", help.contains("--user"));
+        assertTrue("root should have --password", help.contains("--password"));
+        assertTrue("root should have --no-config", help.contains("--no-config"));
+        assertTrue("root should describe no-config purpose", help.contains("Don't use config file"));
+        assertTrue("root should have -r", help.contains("-r,"));
+        assertTrue("root should have --target-realm", help.contains("--target-realm"));
+        assertTrue("root should have --truststore", help.contains("--truststore"));
+        assertTrue("root should have --trustpass", help.contains("--trustpass"));
+        assertTrue("root should have --insecure", help.contains("--insecure"));
+        assertTrue("root should have --keystore", help.contains("--keystore"));
+        assertTrue("root should have --storepass", help.contains("--storepass"));
+        assertTrue("root should have --keypass", help.contains("--keypass"));
+        assertTrue("root should have --alias", help.contains("--alias"));
         assertTrue("--password should mention KC_CLI_PASSWORD", help.contains("KC_CLI_PASSWORD"));
-    }
-
-    @Test
-    public void testSecretDescriptionMentionsEnvVar() {
-        String help = getSubcommandHelp("client", "list");
         assertTrue("--secret should mention KC_CLI_CLIENT_SECRET", help.contains("KC_CLI_CLIENT_SECRET"));
+        assertTrue("--storepass should mention KC_CLI_STORE_PASSWORD", help.contains("KC_CLI_STORE_PASSWORD"));
     }
 
     @Test
@@ -266,10 +281,33 @@ public class KcAdmV2HelpTest {
     }
 
     @Test
-    public void testConnectionOptionsAvailableOnVariant() {
+    public void testLeafSynopsisShowsConnectionOptionsBeforeCommand() {
+        String help = getSubcommandHelp("client", "list");
+        String expected = KcAdmMain.CMD + " " + KcAdmMain.V2_FLAG + " [CONNECTION OPTIONS] client list";
+        assertTrue("leaf synopsis should show: " + expected + ", got: " + help, help.contains(expected));
+    }
+
+    @Test
+    public void testVariantSynopsisShowsConnectionOptionsBeforeCommand() {
         String help = getVariantHelp("create", "oidc");
-        assertTrue("should have --config", help.contains("--config"));
-        assertTrue("should have --realm", help.contains("--realm"));
+        String expected = KcAdmMain.CMD + " " + KcAdmMain.V2_FLAG + " [CONNECTION OPTIONS] client create oidc";
+        assertTrue("variant synopsis should show: " + expected + ", got: " + help, help.contains(expected));
+    }
+
+    @Test
+    public void testGroupSynopsisShowsConnectionOptionsBeforeCommand() {
+        CommandLine cli = createCli();
+        String help = cli.getSubcommands().get("client").getUsageMessage();
+        String expected = KcAdmMain.CMD + " " + KcAdmMain.V2_FLAG + " [CONNECTION OPTIONS] client";
+        assertTrue("group synopsis should show: " + expected + ", got: " + help, help.contains(expected));
+    }
+
+    @Test
+    public void testVariantDoesNotHaveConnectionOptions() {
+        String help = getVariantHelp("create", "oidc");
+        assertFalse("variant should not have --config", help.contains("--config"));
+        assertFalse("variant should not have --realm", help.contains("--realm"));
+        assertFalse("variant should not have --server", help.contains("--server"));
     }
 
     @Test
@@ -303,7 +341,7 @@ public class KcAdmV2HelpTest {
 
             int exitCode = cli.execute("client", "list", "--help");
             assertEquals("--help should exit with 0", 0, exitCode);
-            assertTrue("--help should show connection options", out.toString().contains("--config"));
+            assertFalse("--help should not show connection options", out.toString().contains("--config"));
             assertTrue("--help should show output options", out.toString().contains("--compressed"));
         } finally {
             Globals.help = false;
@@ -321,6 +359,42 @@ public class KcAdmV2HelpTest {
         int exitCode = cli.execute("client", "--help");
         assertEquals("--help on group command should exit with 0", 0, exitCode);
         assertTrue("should show subcommands", out.toString().contains("list"));
+    }
+
+    @Test
+    public void testHelpBeforeSubcommandShowsClientHelp() {
+        CommandLine cli = createCli();
+        StringWriter out = new StringWriter();
+        cli.setOut(new PrintWriter(out));
+        cli.setErr(new PrintWriter(new StringWriter()));
+
+        // showHelpForLeafCommand moves --help to the end, same as KcAdmMain.main() does
+        // manually applied here to avoid System.exit
+        String[] args = {"--help", "client"};
+        KcAdmMain.showHelpForLeafCommand(args);
+        int exitCode = cli.execute(args);
+        assertEquals("--help client should exit with 0", 0, exitCode);
+        String output = out.toString();
+        assertTrue("should show client help with subcommands listed, got: " + output,
+                output.contains("list") && output.contains("create"));
+    }
+
+    @Test
+    public void testHelpOnConfigBeforeSubcommandShowsEditorHelp() {
+        CommandLine cli = createCli();
+        StringWriter out = new StringWriter();
+        cli.setOut(new PrintWriter(out));
+        cli.setErr(new PrintWriter(new StringWriter()));
+
+        // showHelpForLeafCommand moves --help to the end, same as KcAdmMain.main() does
+        // manually applied here to avoid System.exit
+        String[] args = {"config", "--help", "editor"};
+        KcAdmMain.showHelpForLeafCommand(args);
+        int exitCode = cli.execute(args);
+        assertEquals("config --help editor should exit with 0", 0, exitCode);
+        String output = out.toString();
+        assertTrue("should show editor help with <editor> parameter, got: " + output,
+                output.contains("<editor>") && output.contains("--config"));
     }
 
     @Test
@@ -355,10 +429,10 @@ public class KcAdmV2HelpTest {
     }
 
     @Test
-    public void testVariantParentShowsConnectionOptions() {
+    public void testVariantParentDoesNotShowConnectionOptions() {
         String help = getVariantParentHelp("create");
-        assertTrue("create parent should show --config: " + help, help.contains("--config"));
-        assertTrue("create parent should show --server: " + help, help.contains("--server"));
+        assertFalse("create parent should not show --config: " + help, help.contains("--config"));
+        assertFalse("create parent should not show --server: " + help, help.contains("--server"));
     }
 
     @Test
@@ -406,10 +480,10 @@ public class KcAdmV2HelpTest {
     }
 
     @Test
-    public void testEditHasConnectionAndOutputOptions() {
+    public void testEditDoesNotHaveConnectionOptions() {
         String help = getSubcommandHelp("client", "edit");
-        assertTrue("edit should have --config", help.contains("--config"));
-        assertTrue("edit should have --realm", help.contains("--realm"));
+        assertFalse("edit should not have --config", help.contains("--config"));
+        assertFalse("edit should not have --realm", help.contains("--realm"));
         assertTrue("edit should have Output options", help.contains("Output options:"));
     }
 
@@ -457,8 +531,8 @@ public class KcAdmV2HelpTest {
             cli.setErr(new PrintWriter(err));
             cli.setOut(new PrintWriter(out));
 
-            cli.execute("client", "list", "-x", "--no-config");
-            // Will fail (no server) but -x should be accepted, not rejected as unknown
+            cli.execute("-x", "--no-config", "client", "list");
+            // Will fail (no server) but -x and --no-config should be accepted on root, not rejected as unknown
             assertFalse("-x should not be reported as unknown option",
                     err.toString().contains("Unknown option"));
             assertTrue("should fail with server error, not option error",
@@ -492,6 +566,16 @@ public class KcAdmV2HelpTest {
                 .getSubcommands().get("credentials").getCommand()).help();
         assertTrue("should show --openapi-url option: " + help, help.contains("--openapi-url"));
         assertTrue("should show --v2 in command: " + help, help.contains("--v2"));
+    }
+
+    @Test
+    public void testConfigHelpShowsAllV2Subcommands() {
+        CommandLine cli = createCli();
+        String help = ((ConfigCmd) cli.getSubcommands().get("config").getCommand()).help();
+        assertTrue("should list 'editor': " + help, help.contains("editor"));
+        assertTrue("should list 'openapi': " + help, help.contains("openapi"));
+        assertTrue("should list 'credentials': " + help, help.contains("credentials"));
+        assertTrue("should list 'truststore': " + help, help.contains("truststore"));
     }
 
     private String getVariantParentHelp(String command) {

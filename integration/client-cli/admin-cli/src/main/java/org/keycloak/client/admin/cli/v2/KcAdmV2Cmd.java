@@ -8,8 +8,8 @@ import java.io.PrintWriter;
 import java.nio.file.Path;
 
 import org.keycloak.client.admin.cli.KcAdmMain;
+import org.keycloak.client.admin.cli.commands.AbstractTargetAuthOptionsCmd;
 import org.keycloak.client.admin.cli.commands.ConfigCmd;
-import org.keycloak.client.cli.common.BaseGlobalOptionsCmd;
 import org.keycloak.client.cli.config.ConfigData;
 import org.keycloak.util.JsonSerialization;
 
@@ -26,7 +26,7 @@ import static org.keycloak.client.cli.util.OsUtil.PROMPT;
         description = "%nCOMMAND [ARGUMENTS]",
         footer = {"%nEnable tab completion:%n  source <(kcadm.sh --v2 completion)"}
 )
-public class KcAdmV2Cmd extends BaseGlobalOptionsCmd {
+public class KcAdmV2Cmd extends AbstractTargetAuthOptionsCmd {
 
     private static final String BUNDLED_DESCRIPTOR = "/kcadm-v2-commands.json";
     private static final String CONFIG_FILE_NAME = Path.of(KcAdmMain.DEFAULT_CONFIG_FILE_PATH).getFileName().toString();
@@ -89,6 +89,7 @@ public class KcAdmV2Cmd extends BaseGlobalOptionsCmd {
     @Override
     protected void configureCommandLine(CommandLine cli) {
         cli.getCommandSpec().name(CMD + " " + V2_FLAG);
+        cli.getCommandSpec().usageMessage().optionListHeading("%nConnection options:%n");
         CommandLine configCmd = new CommandLine(new ConfigCmd(true));
         configCmd.getCommandSpec().usageMessage().description("Configuration management");
         configCmd.getCommandSpec().removeSubcommand("credentials");
@@ -97,7 +98,7 @@ public class KcAdmV2Cmd extends BaseGlobalOptionsCmd {
         configCmd.addSubcommand("editor", new CommandLine(new KcAdmV2ConfigEditorCmd()));
         cli.addSubcommand(configCmd);
         KcAdmV2CommandDescriptor descriptor = loadDescriptor();
-        KcAdmV2CommandBuilder.addCommands(cli, descriptor);
+        new KcAdmV2CommandBuilder(this).addCommands(cli, descriptor);
     }
 
     private KcAdmV2CommandDescriptor loadDescriptor() {
