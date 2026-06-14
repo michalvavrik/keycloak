@@ -215,6 +215,7 @@ public class KcAdmV2CommandDescriptor {
         private boolean array;
         private List<String> enumValues;
         private String parentFieldName;
+        private boolean queryParam;
 
         public String getName() {
             return name;
@@ -270,6 +271,14 @@ public class KcAdmV2CommandDescriptor {
 
         public void setParentFieldName(String parentFieldName) {
             this.parentFieldName = parentFieldName;
+        }
+
+        public boolean isQueryParam() {
+            return queryParam;
+        }
+
+        public void setQueryParam(boolean queryParam) {
+            this.queryParam = queryParam;
         }
     }
 }
