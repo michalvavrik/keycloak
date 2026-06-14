@@ -13,19 +13,26 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Model.OptionSpec;
 import picocli.CommandLine.Model.PositionalParamSpec;
 
+import static java.util.function.Predicate.not;
+
 import static org.keycloak.client.admin.cli.KcAdmMain.CMD;
 import static org.keycloak.client.admin.cli.KcAdmMain.V2_FLAG;
 import static org.keycloak.common.util.ObjectUtil.capitalize;
 
-class KcAdmV2CommandBuilder {
+final class KcAdmV2CommandBuilder {
 
     private static final String OPT_HELP = "--help";
     static final String OPT_FILE = "-f";
     static final String OPT_COMPRESSED = "--compressed";
-    private static final String CONNECTION_OPTIONS_HEADING = "%nConnection options:%n";
     private static final String CMD_EDIT = "edit";
 
-    static void addCommands(CommandLine cli, KcAdmV2CommandDescriptor descriptor) {
+    private final KcAdmV2Cmd root;
+
+    KcAdmV2CommandBuilder(KcAdmV2Cmd root) {
+        this.root = root;
+    }
+
+    void addCommands(CommandLine cli, KcAdmV2CommandDescriptor descriptor) {
         for (ResourceDescriptor resource : descriptor.getResources()) {
             GroupCommand groupCommand = new GroupCommand(resource.getName());
             CommandSpec groupSpec = CommandSpec.wrapWithoutInspection(groupCommand);
@@ -56,7 +63,7 @@ class KcAdmV2CommandBuilder {
         }
     }
 
-    private static CommandLine buildSubcommand(CommandDescriptor cmd) {
+    private CommandLine buildSubcommand(CommandDescriptor cmd) {
         if (cmd.hasVariants()) {
             return buildVariantParentCommand(cmd);
         }
@@ -64,7 +71,7 @@ class KcAdmV2CommandBuilder {
         return buildLeafCommand(cmd, cmd.getOptions(), null);
     }
 
-    private static CommandLine buildVariantParentCommand(CommandDescriptor cmd) {
+    private CommandLine buildVariantParentCommand(CommandDescriptor cmd) {
         CommandLine parentCli = buildLeafCommand(cmd, null, null);
 
         for (VariantDescriptor variant : cmd.getVariants()) {
@@ -72,23 +79,26 @@ class KcAdmV2CommandBuilder {
                     buildLeafCommand(cmd, variant.getOptions(), variant));
         }
 
+        // -f and variant subcommands are mutually exclusive: either provide a JSON file
+        // or pick a variant (e.g. oidc/saml) to get field-specific options
+        String variants = String.join(" | ", parentCli.getSubcommands().keySet());
+        parentCli.getCommandSpec().usageMessage().customSynopsis(
+                CMD + " " + V2_FLAG + " " + KcAdmV2Cmd.CONNECTION_OPTIONS_HINT + " "
+                        + cmd.getResourceName() + " " + cmd.getName()
+                        + " [" + OPT_FILE + " <file> | " + variants + "]");
+
         return parentCli;
     }
 
-    private static CommandLine buildLeafCommand(CommandDescriptor cmd,
+    private CommandLine buildLeafCommand(CommandDescriptor cmd,
             List<OptionDescriptor> options, VariantDescriptor variant) {
         boolean isVariantParent = variant == null && cmd.hasVariants();
 
-        KcAdmV2RequestExecutor executor = new KcAdmV2RequestExecutor(cmd, variant);
-        CommandSpec spec = CommandSpec.forAnnotatedObject(executor);
+        CommandSpec spec = new KcAdmV2RequestExecutor(root, cmd, variant).getSpec();
         spec.name(variant != null ? variant.getName() : cmd.getName());
         spec.usageMessage().description(cmd.getDescription());
-        spec.usageMessage().optionListHeading(CONNECTION_OPTIONS_HEADING);
-
-        // Replace inherited --help with usageHelp=true so PicoCLI skips
-        // required parameter validation when --help is present
-        spec.remove(spec.findOption(OPT_HELP));
         addHelpOption(spec);
+        addDumpTraceOption(spec);
 
         if (cmd.isHasResponseBody()) {
             addOutputGroup(spec);
@@ -98,23 +108,42 @@ class KcAdmV2CommandBuilder {
             addIdPositional(spec, cmd.getResourceName());
         }
 
-        boolean hasFieldOptions = options != null && !options.isEmpty();
-        if (hasFieldOptions || isVariantParent) {
+        boolean hasBodyOptions = options != null && options.stream().anyMatch(not(OptionDescriptor::isQueryParam));
+        if (hasBodyOptions || isVariantParent) {
             ArgGroupSpec.Builder fieldGroup = ArgGroupSpec.builder()
                     .heading("%nOptions:%n")
                     .exclusive(false)
                     .validate(false)
                     .order(1);
 
-            fieldGroup.addArg(buildFileOption(hasFieldOptions));
+            fieldGroup.addArg(buildFileOption(hasBodyOptions));
 
-            if (hasFieldOptions) {
+            if (hasBodyOptions) {
                 for (OptionDescriptor opt : options) {
-                    fieldGroup.addArg(buildOption(opt));
+                    if (!opt.isQueryParam()) {
+                        fieldGroup.addArg(buildOption(opt));
+                    }
                 }
             }
 
             spec.addArgGroup(fieldGroup.build());
+        }
+
+        boolean hasQueryOptions = options != null && options.stream().anyMatch(OptionDescriptor::isQueryParam);
+        if (hasQueryOptions) {
+            ArgGroupSpec.Builder queryGroup = ArgGroupSpec.builder()
+                    .heading("%nQuery options:%n")
+                    .exclusive(false)
+                    .validate(false)
+                    .order(2);
+
+            for (OptionDescriptor opt : options) {
+                if (opt.isQueryParam()) {
+                    queryGroup.addArg(buildOption(opt));
+                }
+            }
+
+            spec.addArgGroup(queryGroup.build());
         }
 
         return new CommandLine(spec);
@@ -127,13 +156,23 @@ class KcAdmV2CommandBuilder {
             description += (description.isEmpty() ? "" : " ") + "Valid values: " + String.join(", ", enumValues);
         }
 
+        String paramLabel = "<value>";
+        if (enumValues != null && !enumValues.isEmpty()) {
+            paramLabel = "<" + String.join("|", enumValues) + ">";
+        }
+
         OptionSpec.Builder builder = OptionSpec.builder("--" + opt.getName())
                 .type(opt.isArray() ? String[].class : String.class)
-                .paramLabel("<value>")
+                .paramLabel(paramLabel)
                 .description(description);
 
         if (opt.isArray()) {
             builder.splitRegex(",");
+            if (enumValues != null && !enumValues.isEmpty()) {
+                builder.hideParamSyntax(true);
+                paramLabel += "[,...]";
+                builder.paramLabel(paramLabel);
+            }
         }
 
         if (enumValues != null && !enumValues.isEmpty()) {
@@ -154,17 +193,14 @@ class KcAdmV2CommandBuilder {
                 .build();
     }
 
-    private static CommandLine buildEditCommand(CommandDescriptor getCmd, CommandDescriptor putCmd) {
+    private CommandLine buildEditCommand(CommandDescriptor getCmd, CommandDescriptor putCmd) {
         String resourceName = getCmd.getResourceName();
 
-        KcAdmV2EditCmd executor = new KcAdmV2EditCmd(getCmd, putCmd);
-        CommandSpec spec = CommandSpec.forAnnotatedObject(executor);
+        CommandSpec spec = new KcAdmV2EditCmd(root, getCmd, putCmd).getSpec();
         spec.name(CMD_EDIT);
         spec.usageMessage().description(KcAdmV2EditCmd.createDescription(resourceName));
-        spec.usageMessage().optionListHeading(CONNECTION_OPTIONS_HEADING);
-
-        spec.remove(spec.findOption(OPT_HELP));
         addHelpOption(spec);
+        addDumpTraceOption(spec);
         addOutputGroup(spec);
         addIdPositional(spec, resourceName);
 
@@ -197,6 +233,14 @@ class KcAdmV2CommandBuilder {
     private static void addHelpOption(CommandSpec spec) {
         spec.addOption(OptionSpec.builder("-h", OPT_HELP)
                 .usageHelp(true)
+                .hidden(true)
+                .build());
+    }
+
+    private static void addDumpTraceOption(CommandSpec spec) {
+        spec.addOption(OptionSpec.builder("-x")
+                .type(boolean.class)
+                .description("Print full stack trace when exiting with error")
                 .hidden(true)
                 .build());
     }

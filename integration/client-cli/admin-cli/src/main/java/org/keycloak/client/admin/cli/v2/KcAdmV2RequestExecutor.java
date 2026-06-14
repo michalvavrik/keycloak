@@ -32,9 +32,7 @@ import org.keycloak.util.JsonSerialization;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.http.HttpHeaders;
 import picocli.CommandLine;
-import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
 
 import static org.keycloak.client.cli.util.ConfigUtil.credentialsAvailable;
 import static org.keycloak.client.cli.util.ConfigUtil.loadConfig;
@@ -42,8 +40,7 @@ import static org.keycloak.client.cli.util.HttpUtil.APPLICATION_JSON;
 import static org.keycloak.client.cli.util.IoUtil.readFully;
 import static org.keycloak.common.util.ObjectUtil.capitalize;
 
-@Command
-class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
+class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd implements Runnable {
 
     static final String MERGE_PATCH_JSON = "application/merge-patch+json";
     static final String API_VERSION = "v2";
@@ -55,17 +52,20 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
             "client", "clientId"
     );
 
-    @Spec CommandSpec spec;
+    protected final CommandSpec spec;
+    protected final AbstractTargetAuthOptionsCmd root;
     private final CommandDescriptor descriptor;
     private final VariantDescriptor variant;
 
-    KcAdmV2RequestExecutor(CommandDescriptor descriptor, VariantDescriptor variant) {
+    KcAdmV2RequestExecutor(AbstractTargetAuthOptionsCmd root, CommandDescriptor descriptor, VariantDescriptor variant) {
         super();
+        this.spec = CommandSpec.wrapWithoutInspection(this);
+        this.root = root;
         this.descriptor = descriptor;
         this.variant = variant;
     }
 
-    private boolean isVariantParent() {
+    boolean isVariantParent() {
         return variant == null && descriptor.hasVariants();
     }
 
@@ -158,6 +158,10 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
             return;
         }
 
+        initFromParent(root);
+        if (spec.commandLine().getParseResult().matchedOptionValue("-x", false)) {
+            Globals.dumpTrace = true;
+        }
         PrintWriter out = spec.commandLine().getOut();
 
         try {
@@ -227,7 +231,40 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
             path = path.replace(KcAdmV2DescriptorBuilder.ID_PATH_PARAM, HttpUtil.urlencode(id));
         }
 
-        return configData.getServerUrl() + path;
+        String baseUrl = configData.getServerUrl() + path;
+        return baseUrl + buildQueryString();
+    }
+
+    private String buildQueryString() {
+        List<OptionDescriptor> options = descriptor.getOptions();
+        if (options == null || options.isEmpty()) {
+            return "";
+        }
+        StringBuilder queryString = new StringBuilder();
+        for (OptionDescriptor opt : options) {
+            if (!opt.isQueryParam()) {
+                continue;
+            }
+            Object value = spec.commandLine().getParseResult()
+                    .matchedOptionValue("--" + opt.getName(), null);
+            if (value == null) {
+                continue;
+            }
+            if (opt.isArray() && value instanceof String[] array) {
+                for (String element : array) {
+                    if (!queryString.isEmpty()) {
+                        queryString.append("&");
+                    }
+                    queryString.append(HttpUtil.urlencode(opt.getFieldName())).append("=").append(HttpUtil.urlencode(element));
+                }
+            } else {
+                if (!queryString.isEmpty()) {
+                    queryString.append("&");
+                }
+                queryString.append(HttpUtil.urlencode(opt.getFieldName())).append("=").append(HttpUtil.urlencode(value.toString()));
+            }
+        }
+        return queryString.isEmpty() ? "" : "?" + queryString;
     }
 
     private String extractIdFromBody(String body) {
@@ -278,6 +315,9 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
         }
 
         for (OptionDescriptor opt : options) {
+            if (opt.isQueryParam()) {
+                continue;
+            }
             Object value = spec.commandLine().getParseResult()
                     .matchedOptionValue("--" + opt.getName(), null);
             if (value != null) {
@@ -359,5 +399,9 @@ class KcAdmV2RequestExecutor extends AbstractTargetAuthOptionsCmd {
         } catch (Exception e) {
             throw new RuntimeException("Error processing results: " + e.getMessage(), e);
         }
+    }
+
+    final CommandSpec getSpec() {
+        return spec;
     }
 }
