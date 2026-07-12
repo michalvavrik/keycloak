@@ -26,6 +26,12 @@ import org.keycloak.it.junit5.extension.WithDatabase;
 public class OracleTest extends BasicDatabaseTest {
 
     @Override
+    protected void testSuccessful(CLIResult cliResult) {
+        super.testSuccessful(cliResult);
+        cliResult.assertNoMessage("Ignoring property 'oracle.net.CONNECT_TIMEOUT'");
+    }
+
+    @Override
     protected void assertWrongUsername(CLIResult cliResult) {
         cliResult.assertMessage("ORA-01017: invalid username/password; logon denied");
     }
