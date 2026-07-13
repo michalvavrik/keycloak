@@ -1071,7 +1071,7 @@ public abstract class AbstractClientPoliciesTest extends AbstractKeycloakTest {
         ClientPolicyExecutorRepresentation executorRep = profileRep.getExecutors().stream()
                 .filter(profileRepp -> providerId.equals(profileRepp.getExecutorProviderId()))
                 .findFirst().orElse(null);
-        return executorRep == null ? null : executorRep.getConfiguration();
+        return executorRep == null ? null : executorRep.getConfiguration().unwrap(JsonNode.class);
     }
 
     // Assertions about policies
