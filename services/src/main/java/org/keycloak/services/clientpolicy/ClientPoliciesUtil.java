@@ -138,7 +138,7 @@ public class ClientPoliciesUtil {
         List<ClientPolicyExecutorProvider> executors = new ArrayList<>();
         if (profileRep.getExecutors() != null) {
             for (ClientPolicyExecutorRepresentation executorRep : profileRep.getExecutors()) {
-                ClientPolicyExecutorProvider provider = getExecutorProvider(session, realm, executorRep.getExecutorProviderId(), executorRep.getConfiguration());
+                ClientPolicyExecutorProvider provider = getExecutorProvider(session, realm, executorRep.getExecutorProviderId(), executorRep.getConfiguration().unwrap(JsonNode.class));
                 executors.add(provider);
             }
         }
@@ -340,8 +340,8 @@ public class ClientPoliciesUtil {
         Set<String> providerSet = session.listProviderIds(ClientPolicyExecutorProvider.class);
         if (providerSet != null && providerSet.contains(executorProviderId)) {
             if (Objects.nonNull(session.getContext().getRealm())){
-                ClientPolicyExecutorProvider provider = getExecutorProvider(session, session.getContext().getRealm(), executorProviderId, executorRep.getConfiguration());
-                ClientPolicyExecutorConfigurationRepresentation configuration =  (ClientPolicyExecutorConfigurationRepresentation) JsonSerialization.mapper.convertValue(executorRep.getConfiguration(), provider.getExecutorConfigurationClass());
+                ClientPolicyExecutorProvider provider = getExecutorProvider(session, session.getContext().getRealm(), executorProviderId, executorRep.getConfiguration().unwrap(JsonNode.class));
+                ClientPolicyExecutorConfigurationRepresentation configuration =  (ClientPolicyExecutorConfigurationRepresentation) JsonSerialization.mapper.convertValue(executorRep.getConfiguration().unwrap(JsonNode.class), provider.getExecutorConfigurationClass());
                 return configuration.validateConfig();
             } else {
                 return true;
@@ -425,7 +425,7 @@ public class ClientPoliciesUtil {
             List<ClientPolicyConditionProvider> conditions = new ArrayList<>();
             if (policyRep.getConditions() != null) {
                 for (ClientPolicyConditionRepresentation conditionRep : policyRep.getConditions()) {
-                    ClientPolicyConditionProvider provider = getConditionProvider(session, realm, conditionRep.getConditionProviderId(), conditionRep.getConfiguration());
+                    ClientPolicyConditionProvider provider = getConditionProvider(session, realm, conditionRep.getConditionProviderId(), conditionRep.getConfiguration().unwrap(JsonNode.class));
                     conditions.add(provider);
                 }
             }
