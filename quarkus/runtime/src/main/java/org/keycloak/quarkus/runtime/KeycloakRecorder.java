@@ -65,11 +65,8 @@ import org.keycloak.theme.ClasspathThemeProviderFactory;
 import org.keycloak.truststore.TruststoreBuilder;
 import org.keycloak.userprofile.DeclarativeUserProfileProviderFactory;
 
-import io.agroal.api.AgroalDataSource;
-import io.quarkus.agroal.DataSource;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.InstanceHandle;
 import io.quarkus.hibernate.orm.runtime.integration.HibernateOrmIntegrationRuntimeInitListener;
+import io.quarkus.hibernate.orm.runtime.integration.HibernateOrmIntegrationStaticInitListener;
 import io.quarkus.runtime.RuntimeValue;
 import io.quarkus.runtime.annotations.Recorder;
 import io.quarkus.vertx.http.runtime.security.SecurityHandlerPriorities;
@@ -211,26 +208,34 @@ public class KeycloakRecorder {
         WebAuthnMetadataService.setDefaultMetadata(metadata);
     }
 
+    public HibernateOrmIntegrationRuntimeInitListener createDefaultUnitListener() {
+        return propertyCollector -> propertyCollector.accept(AvailableSettings.DEFAULT_SCHEMA, Configuration.getConfigValue(DatabaseOptions.DB_SCHEMA).getValue());
+    }
 
-    public HibernateOrmIntegrationRuntimeInitListener createUserDefinedUnitListener(String name) {
-        return propertyCollector -> {
-            try (InstanceHandle<AgroalDataSource> instance = Arc.container().instance(
-                    AgroalDataSource.class, new DataSource() {
-                        @Override public Class<? extends Annotation> annotationType() {
-                            return DataSource.class;
-                        }
+    public HibernateOrmIntegrationStaticInitListener createStaticPropertiesListener(Map<String, ?> properties) {
+        return new HibernateOrmIntegrationStaticInitListener() {
+            @Override
+            public void contributeBootProperties(java.util.function.BiConsumer<String, Object> propertyCollector) {
+                for (Map.Entry<String, ?> entry : properties.entrySet()) {
+                    propertyCollector.accept(entry.getKey(), entry.getValue());
+                }
+            }
 
-                        @Override public String value() {
-                            return name;
-                        }
-                    })) {
-                propertyCollector.accept(AvailableSettings.DATASOURCE, instance.get());
+            @Override
+            public void onMetadataInitialized(org.hibernate.boot.Metadata metadata,
+                    org.hibernate.boot.spi.BootstrapContext bootstrapContext,
+                    java.util.function.BiConsumer<String, Object> propertyCollector) {
             }
         };
     }
 
-    public HibernateOrmIntegrationRuntimeInitListener createDefaultUnitListener() {
-        return propertyCollector -> propertyCollector.accept(AvailableSettings.DEFAULT_SCHEMA, Configuration.getConfigValue(DatabaseOptions.DB_SCHEMA).getValue());
+    public HibernateOrmIntegrationRuntimeInitListener createUserDefinedUnitRuntimeListener(Map<String, String> originalProps) {
+        return propertyCollector -> {
+            String hbm2ddlAuto = originalProps.get("hibernate.hbm2ddl.auto");
+            if (hbm2ddlAuto != null) {
+                propertyCollector.accept(AvailableSettings.JAKARTA_HBM2DDL_DATABASE_ACTION, hbm2ddlAuto);
+            }
+        };
     }
 
     public void setCryptoProvider(FipsMode fipsMode) {

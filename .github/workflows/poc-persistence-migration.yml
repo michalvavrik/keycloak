@@ -1,0 +1,97 @@
+name: POC Persistence Migration
+
+on:
+  push:
+    branches:
+      - poc/persistence-migration-50167
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  QUARKUS_BRANCH: 3.x
+  MAVEN_ARGS: -B -e --no-transfer-progress
+
+jobs:
+  build-and-test:
+    name: Build and test POC
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Quarkus
+        uses: actions/checkout@v4
+        with:
+          repository: quarkusio/quarkus
+          ref: ${{ env.QUARKUS_BRANCH }}
+          path: quarkus
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Cherry-pick fixes not yet backported to 3.x
+        run: |
+          cd quarkus
+          if ! git log --oneline | grep -q "3091d5afe25e"; then
+            git fetch origin 3091d5afe25e28b562e5e6d339809c69884be2cd
+            git cherry-pick --no-commit 3091d5afe25e28b562e5e6d339809c69884be2cd
+          fi
+          if ! git log --oneline | grep -q "cd4838b87aa"; then
+            git remote add michalvavrik https://github.com/michalvavrik/quarkus.git
+            git fetch michalvavrik backport/additional-pu-dialect-3x
+            git cherry-pick --no-commit cd4838b87aa
+          fi
+
+      - name: Build Quarkus snapshot
+        run: |
+          cd quarkus
+          ./mvnw $MAVEN_ARGS -Dquickly -Dno-test-modules -Prelocations clean install
+
+      - name: Extract Quarkus version
+        id: quarkus-version
+        run: |
+          version=$(grep -m1 '<version>' quarkus/pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Checkout Keycloak
+        uses: actions/checkout@v4
+        with:
+          path: keycloak
+
+      - name: Prepare Keycloak for Quarkus snapshot
+        run: |
+          cd keycloak
+          sed -i 's|<groupId>io.quarkus.platform</groupId>|<groupId>io.quarkus</groupId>|g' pom.xml
+          ./quarkus/set-quarkus-version.sh ${{ steps.quarkus-version.outputs.version }}
+
+      - name: Build Keycloak
+        run: |
+          cd keycloak
+          mvn $MAVEN_ARGS install -DskipTests
+
+      - name: Run DefaultPuPropertiesTest
+        run: |
+          cd keycloak
+          mvn $MAVEN_ARGS test -pl tests/base -Dtest=DefaultPuPropertiesTest
+
+      - name: Run PersistenceXmlDatasourcesTest
+        run: |
+          cd keycloak
+          mvn $MAVEN_ARGS test -pl quarkus/deployment -Dtest=PersistenceXmlDatasourcesTest
+
+      - name: Run NamedPuConfigDistTest
+        run: |
+          cd keycloak
+          mvn $MAVEN_ARGS test -pl quarkus/tests/integration -Dtest=NamedPuConfigDistTest
+
+      - name: Run CustomJpaEntityProviderDistTest
+        run: |
+          cd keycloak
+          mvn $MAVEN_ARGS test -pl quarkus/tests/integration -Dtest=CustomJpaEntityProviderDistTest
+
+      - name: Run ManualMigrationCustomProviderDistTest
+        run: |
+          cd keycloak
+          mvn $MAVEN_ARGS test -pl quarkus/tests/integration -Dtest=ManualMigrationCustomProviderDistTest

@@ -19,11 +19,30 @@ package org.keycloak.quarkus.runtime.storage.database.jpa;
 
 import java.util.function.Supplier;
 
+import io.agroal.api.AgroalDataSource;
+import io.quarkus.agroal.DataSource;
+import io.quarkus.arc.Arc;
 import jakarta.persistence.EntityManagerFactory;
+import org.jboss.logging.Logger;
+import org.keycloak.models.KeycloakSessionFactory;
 
 public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnectionProviderFactory {
 
+    private static final Logger LOG = Logger.getLogger(NamedJpaConnectionProviderFactory.class);
+
     private String unitName;
+
+    @Override
+    public void postInit(KeycloakSessionFactory factory) {
+        var dsInstance = Arc.requireContainer().select(AgroalDataSource.class, new DataSource.DataSourceLiteral(unitName));
+        if (dsInstance.isResolvable() && !dsInstance.getHandle().getBean().isActive()) {
+            LOG.warnf("Datasource '%s' was deactivated automatically because its URL is not set."
+                    + " To activate the datasource, set configuration property 'quarkus.datasource.\"%s\".jdbc.url'."
+                    + " Refer to https://quarkus.io/guides/datasource for guidance.", unitName, unitName);
+            return;
+        }
+        super.postInit(factory);
+    }
 
     @Override
     protected EntityManagerFactory getEntityManagerFactory() {

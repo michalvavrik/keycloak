@@ -77,10 +77,7 @@ public class CustomJpaEntityProviderDistTest {
         cliResult.assertStringCount("name: pu-without-dialect-store", 1);
         cliResult.assertStringCount("com.acme.provider.legacy.jpa.entity.Realm", 1);
 
-        cliResult.assertMessage("jakarta.persistence.jtaDataSource: client-store");
-        cliResult.assertMessage("jakarta.persistence.jtaDataSource: new-user-store");
-        cliResult.assertMessage("jakarta.persistence.jtaDataSource: pu-without-dialect-store");
-        cliResult.assertStringCount("hibernate.dialect: org.hibernate.dialect.H2Dialect", 4);
+        cliResult.assertStringCount("hibernate.dialect: org.hibernate.dialect.H2Dialect", 2);
 
         cliResult.assertStartedDevMode();
     }

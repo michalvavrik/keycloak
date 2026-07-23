@@ -33,21 +33,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.logging.Handler;
 
 import jakarta.inject.Singleton;
 import jakarta.persistence.Entity;
-import jakarta.persistence.PersistenceUnitTransactionType;
 
 import org.keycloak.Config;
 import org.keycloak.authentication.AuthenticatorSpi;
@@ -147,9 +144,10 @@ import io.quarkus.deployment.builditem.HotDeploymentWatchedFileBuildItem;
 import io.quarkus.deployment.builditem.IndexDependencyBuildItem;
 import io.quarkus.deployment.builditem.StaticInitConfigBuilderBuildItem;
 import io.quarkus.hibernate.orm.deployment.HibernateOrmConfig;
-import io.quarkus.hibernate.orm.deployment.PersistenceXmlDescriptorBuildItem;
 import io.quarkus.hibernate.orm.deployment.integration.HibernateOrmIntegrationRuntimeConfiguredBuildItem;
+import io.quarkus.hibernate.orm.deployment.integration.HibernateOrmIntegrationStaticConfiguredBuildItem;
 import io.quarkus.hibernate.orm.deployment.spi.AdditionalJpaModelBuildItem;
+import io.quarkus.hibernate.orm.deployment.spi.AdditionalPersistenceUnitBuildItem;
 import io.quarkus.narayana.jta.runtime.TransactionManagerBuildTimeConfig;
 import io.quarkus.narayana.jta.runtime.TransactionManagerBuildTimeConfig.UnsafeMultipleLastResourcesMode;
 import io.quarkus.resteasy.reactive.server.spi.MethodScannerBuildItem;
@@ -167,7 +165,6 @@ import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.eclipse.microprofile.health.Readiness;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.JdbcSettings;
-import org.hibernate.jpa.boot.internal.ParsedPersistenceXmlDescriptor;
 import org.hibernate.jpa.boot.spi.PersistenceUnitDescriptor;
 import org.hibernate.jpa.boot.spi.PersistenceXmlParser;
 import org.infinispan.protostream.SerializationContextInitializer;
@@ -201,6 +198,18 @@ import static org.keycloak.theme.ClasspathThemeProviderFactory.KEYCLOAK_THEMES_J
 class KeycloakProcessor {
 
     private static final Logger logger = Logger.getLogger(KeycloakProcessor.class);
+
+    // Properties that conflict with Quarkus's automatic datasource injection via AdditionalPersistenceUnitBuildItem.dataSourceName().
+    // If present in the descriptor properties, injectDataSource() in FastBootHibernatePersistenceProvider bails out
+    // and the PU gets no JDBC connection. These are handled by dataSourceName() on the builder instead.
+    private static final Set<String> DATASOURCE_PROPERTIES = Set.of(
+            AvailableSettings.URL,
+            AvailableSettings.DATASOURCE,
+            AvailableSettings.JPA_JTA_DATASOURCE,
+            AvailableSettings.JPA_NON_JTA_DATASOURCE,
+            AvailableSettings.JAKARTA_JTA_DATASOURCE,
+            AvailableSettings.JAKARTA_NON_JTA_DATASOURCE
+    );
 
     private static final String JAR_FILE_SEPARATOR = "!/";
     private static final Map<String, Function<ScriptProviderMetadata, ProviderFactory>> DEPLOYEABLE_SCRIPT_PROVIDERS = new HashMap<>();
@@ -404,17 +413,15 @@ class KeycloakProcessor {
     @BuildStep
     @Consume(ProfileBuildItem.class)
     @Produce(ValidatePersistenceUnitsBuildItem.class)
-    void checkPersistenceUnits(List<PersistenceXmlDescriptorBuildItem> descriptors) {
+    void checkPersistenceUnits(List<AdditionalPersistenceUnitBuildItem> additionalPUs) {
         if (Database.Vendor.TIDB.isOfKind(Configuration.getConfigValue(DB).getValue())) {
             if (!Profile.isFeatureEnabled(Profile.Feature.DB_TIDB)){
                 throw new RuntimeException("The feature TiDB is not enabled");
             }
         }
 
-        List<String> notSetPersistenceUnitsDBKinds = descriptors.stream()
-                .map(PersistenceXmlDescriptorBuildItem::getDescriptor)
-                .filter(descriptor -> !descriptor.getName().equals(DEFAULT_PERSISTENCE_UNIT)) // not default persistence unit
-                .map(KeycloakProcessor::getDatasourceNameFromPersistenceXml)
+        List<String> notSetPersistenceUnitsDBKinds = additionalPUs.stream()
+                .map(pu -> pu.getDataSourceName().orElse(pu.getPersistenceUnitName()))
                 .filter(this::missingDbKind)
                 .map(datasourceName -> PropertyMappers.getWildcardPropertyMapper(DatabaseOptions.DB_KIND).orElseThrow().getFrom(datasourceName)).toList();
 
@@ -509,146 +516,94 @@ class KeycloakProcessor {
      * file so that we can build the application with whatever dialect we want. In addition to the dialect, we should also be
      * allowed to set any additional defaults that we think that makes sense.
      *
-     * @param config
-     * @param descriptors
      */
     @BuildStep
     @Consume(ValidatePersistenceUnitsBuildItem.class)
-    @Record(ExecutionTime.RUNTIME_INIT)
-    void configurePersistenceUnits(HibernateOrmConfig config,
-            List<PersistenceXmlDescriptorBuildItem> descriptors,
+    @Record(ExecutionTime.STATIC_INIT)
+    void configureStaticPersistenceUnitProperties(List<AdditionalPersistenceUnitBuildItem> additionalPUs,
             List<JdbcDataSourceBuildItem> jdbcDataSources,
-            BuildProducer<AdditionalJpaModelBuildItem> additionalJpaModel,
-            CombinedIndexBuildItem indexBuildItem,
+            BuildProducer<HibernateOrmIntegrationStaticConfiguredBuildItem> staticConfigured,
+            KeycloakRecorder recorder) {
+        JdbcDataSourceBuildItem defaultDataSource = getDefaultDataSource(jdbcDataSources);
+
+        Map<String, String> defaultPuStaticProps = new HashMap<>();
+        getOptionalKcValue(DatabaseOptions.DB_DIALECT.getKey())
+                .ifPresent(d -> defaultPuStaticProps.put(AvailableSettings.DIALECT, d));
+        defaultPuStaticProps.put(AvailableSettings.QUERY_STARTUP_CHECKING, Boolean.FALSE.toString());
+        defaultPuStaticProps.put(JdbcSettings.LOG_JDBC_ERRORS, "false");
+        for (Entry<Object, Object> query : loadSpecificNamedQueries(defaultDataSource.getDbKind().toLowerCase()).entrySet()) {
+            defaultPuStaticProps.put(QUERY_PROPERTY_PREFIX + query.getKey(), query.getValue().toString());
+        }
+        if (getOptionalBooleanKcValue(DatabaseOptions.DB_SQL_JPA_DEBUG.getKey()).orElse(false)) {
+            defaultPuStaticProps.put(AvailableSettings.USE_SQL_COMMENTS, "true");
+        }
+        getOptionalKcValue(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES.getKey())
+                .ifPresent(v -> defaultPuStaticProps.put(AvailableSettings.LOG_SLOW_QUERY, v));
+        staticConfigured.produce(new HibernateOrmIntegrationStaticConfiguredBuildItem("keycloak", DEFAULT_PERSISTENCE_UNIT)
+                .setInitListener(recorder.createStaticPropertiesListener(defaultPuStaticProps)));
+
+        for (AdditionalPersistenceUnitBuildItem pu : additionalPUs) {
+            staticConfigured.produce(new HibernateOrmIntegrationStaticConfiguredBuildItem("keycloak", pu.getPersistenceUnitName())
+                    .setInitListener(recorder.createStaticPropertiesListener(pu.getProperties())));
+        }
+    }
+
+    @BuildStep
+    @Consume(ValidatePersistenceUnitsBuildItem.class)
+    @Record(ExecutionTime.RUNTIME_INIT)
+    void configureRuntimePersistenceUnitProperties(List<AdditionalPersistenceUnitBuildItem> additionalPUs,
             BuildProducer<HibernateOrmIntegrationRuntimeConfiguredBuildItem> runtimeConfigured,
             KeycloakRecorder recorder) {
-        ParsedPersistenceXmlDescriptor defaultUnitDescriptor = null;
-        List<String> userManagedEntities = new ArrayList<>();
+        runtimeConfigured.produce(new HibernateOrmIntegrationRuntimeConfiguredBuildItem("keycloak", DEFAULT_PERSISTENCE_UNIT)
+                .setInitListener(recorder.createDefaultUnitListener()));
 
-        for (PersistenceXmlDescriptorBuildItem item : descriptors) {
-            ParsedPersistenceXmlDescriptor descriptor = (ParsedPersistenceXmlDescriptor) item.getDescriptor();
-
-            if (DEFAULT_PERSISTENCE_UNIT.equals(descriptor.getName())) {
-                defaultUnitDescriptor = descriptor;
-                configureDefaultPersistenceUnitProperties(defaultUnitDescriptor, config, getDefaultDataSource(jdbcDataSources));
-                runtimeConfigured.produce(new HibernateOrmIntegrationRuntimeConfiguredBuildItem("keycloak", defaultUnitDescriptor.getName())
-                        .setInitListener(recorder.createDefaultUnitListener()));
-            } else {
-                String datasourceName = getDatasourceNameFromPersistenceXml(descriptor);
-                configurePersistenceUnitProperties(datasourceName, descriptor);
-                // register a listener for customizing the unit configuration at runtime
-                runtimeConfigured.produce(new HibernateOrmIntegrationRuntimeConfiguredBuildItem("keycloak", descriptor.getName())
-                        .setInitListener(recorder.createUserDefinedUnitListener(datasourceName)));
-                userManagedEntities.addAll(descriptor.getManagedClassNames());
-            }
+        for (AdditionalPersistenceUnitBuildItem pu : additionalPUs) {
+            runtimeConfigured.produce(new HibernateOrmIntegrationRuntimeConfiguredBuildItem("keycloak", pu.getPersistenceUnitName())
+                    .setInitListener(recorder.createUserDefinedUnitRuntimeListener(pu.getProperties())));
         }
-
-        if (defaultUnitDescriptor == null) {
-            throw new RuntimeException("No default persistence unit found.");
-        }
-
-        configureDefaultPersistenceUnitEntities(defaultUnitDescriptor, indexBuildItem, userManagedEntities);
     }
 
     @BuildStep
     @Consume(CheckJdbcBuildStep.class)
     @Consume(CheckMultipleDatasourcesBuildStep.class)
-    void produceDefaultPersistenceUnit(BuildProducer<PersistenceXmlDescriptorBuildItem> producer) {
+    void produceUserDefinedPersistenceUnits(BuildProducer<AdditionalPersistenceUnitBuildItem> producer) {
         PersistenceXmlParser parser = PersistenceXmlParser.create();
-        PersistenceUnitDescriptor descriptor = parser.parse(Collections.singletonList(parser.getClassLoaderService().locateResource("default-persistence.xml")))
-                .values()
-                .stream()
-                .findAny()
-                .orElseThrow(() -> new NoSuchElementException("Cannot find the file 'default-persistence.xml'"));
-
-        producer.produce(new PersistenceXmlDescriptorBuildItem(descriptor));
-    }
-
-    static void configurePersistenceUnitProperties(String datasourceName, ParsedPersistenceXmlDescriptor descriptor) {
-        Properties unitProperties = descriptor.getProperties();
-        var isResourceLocalSpecified = PersistenceUnitTransactionType.RESOURCE_LOCAL.equals(descriptor.getPersistenceUnitTransactionType()) ||
-                Optional.ofNullable(unitProperties.getProperty(AvailableSettings.JAKARTA_TRANSACTION_TYPE))
-                        .map(f -> f.equalsIgnoreCase(PersistenceUnitTransactionType.RESOURCE_LOCAL.name()))
-                        .orElse(false);
-        if (isResourceLocalSpecified) {
-            throw new IllegalArgumentException("You need to use '%s' transaction type in your persistence.xml file."
-                    .formatted(PersistenceUnitTransactionType.JTA.name()));
+        List<URL> urls = parser.getClassLoaderService().locateResources("META-INF/persistence.xml");
+        if (urls.isEmpty()) {
+            return;
         }
-
-        // db-dialect
-        DatabasePropertyMappers.getDatasourceOptionValue(DatabaseOptions.DB_DIALECT, datasourceName)
-                .ifPresent(dialect -> unitProperties.setProperty(AvailableSettings.DIALECT, dialect));
-
-        // db-schema
-        DatabasePropertyMappers.getDatasourceOptionValue(DatabaseOptions.DB_SCHEMA, datasourceName)
-                .ifPresent(schema -> unitProperties.setProperty(AvailableSettings.DEFAULT_SCHEMA, schema));
-
-        unitProperties.setProperty(AvailableSettings.JAKARTA_TRANSACTION_TYPE, PersistenceUnitTransactionType.JTA.name());
-        descriptor.setTransactionType(PersistenceUnitTransactionType.JTA);
-
-        // set datasource name
-        unitProperties.setProperty(JdbcSettings.JAKARTA_JTA_DATASOURCE,datasourceName);
-        unitProperties.setProperty(AvailableSettings.DATASOURCE, datasourceName); // for backward compatibility
-
-        // db-debug-jpql
-        DatabasePropertyMappers.getDatasourceOptionValue(DatabaseOptions.DB_SQL_JPA_DEBUG, datasourceName)
-                .ifPresent(f -> unitProperties.put(AvailableSettings.USE_SQL_COMMENTS, f));
-
-        // db-log-slow-queries-threshold
-        DatabasePropertyMappers.getDatasourceOptionValue(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES, datasourceName)
-                .ifPresent(threshold -> unitProperties.put(AvailableSettings.LOG_SLOW_QUERY, threshold));
-    }
-
-    private void configureDefaultPersistenceUnitProperties(ParsedPersistenceXmlDescriptor descriptor, HibernateOrmConfig config,
-            JdbcDataSourceBuildItem defaultDataSource) {
-        if (defaultDataSource == null || !defaultDataSource.isDefault()) {
-            throw new RuntimeException("The server datasource must be the default datasource.");
-        }
-
-        Properties unitProperties = descriptor.getProperties();
-
-        final Optional<String> dialect = getOptionalKcValue(DatabaseOptions.DB_DIALECT.getKey());
-        dialect.ifPresent(d -> unitProperties.setProperty(AvailableSettings.DIALECT, d));
-
-        final Optional<String> defaultSchema = getOptionalKcValue(DatabaseOptions.DB_SCHEMA.getKey());
-        defaultSchema.ifPresent(ds -> unitProperties.setProperty(AvailableSettings.DEFAULT_SCHEMA, ds));
-
-        unitProperties.setProperty(AvailableSettings.JAKARTA_TRANSACTION_TYPE, PersistenceUnitTransactionType.JTA.name());
-        descriptor.setTransactionType(PersistenceUnitTransactionType.JTA);
-
-        unitProperties.setProperty(AvailableSettings.QUERY_STARTUP_CHECKING, Boolean.FALSE.toString());
-
-        String dbKind = defaultDataSource.getDbKind();
-
-        for (Entry<Object, Object> query : loadSpecificNamedQueries(dbKind.toLowerCase()).entrySet()) {
-            unitProperties.setProperty(QUERY_PROPERTY_PREFIX + query.getKey(), query.getValue().toString());
-        }
-
-        if (getOptionalBooleanKcValue(DatabaseOptions.DB_SQL_JPA_DEBUG.getKey()).orElse(false)) {
-            unitProperties.put(AvailableSettings.USE_SQL_COMMENTS, "true");
-        }
-
-        // SqlExceptionHelper should not log-and-throw error messages.
-        // As those messages might later be caught and handled, this is an antipattern so we prevent logging them.
-        unitProperties.put(JdbcSettings.LOG_JDBC_ERRORS, "false");
-
-        getOptionalKcValue(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES.getKey())
-                .ifPresent(v -> unitProperties.put(AvailableSettings.LOG_SLOW_QUERY, v));
-    }
-
-    private void configureDefaultPersistenceUnitEntities(ParsedPersistenceXmlDescriptor descriptor, CombinedIndexBuildItem indexBuildItem,
-            List<String> userManagedEntities) {
-        IndexView index = indexBuildItem.getIndex();
-        Collection<AnnotationInstance> annotations = index.getAnnotations(DotName.createSimple(Entity.class.getName()));
-
-        for (AnnotationInstance annotation : annotations) {
-            AnnotationTarget target = annotation.target();
-            String targetName = target.asClass().name().toString();
-
-            if (!userManagedEntities.contains(targetName)
-                    && (!targetName.startsWith("org.keycloak") || targetName.startsWith("org.keycloak.testsuite"))) {
-                descriptor.addClasses(targetName);
+        for (PersistenceUnitDescriptor descriptor : parser.parse(urls).values()) {
+            String puName = descriptor.getName();
+            if (DEFAULT_PERSISTENCE_UNIT.equals(puName)) {
+                throw new RuntimeException("User-defined persistence unit must not use the reserved name '" + DEFAULT_PERSISTENCE_UNIT + "'.");
             }
+            String datasourceName = getDatasourceNameFromPersistenceXml(descriptor);
+            AdditionalPersistenceUnitBuildItem.Builder builder = AdditionalPersistenceUnitBuildItem.builder(puName)
+                    .dataSourceName(datasourceName);
+            for (String className : descriptor.getManagedClassNames()) {
+                builder.managedClass(className);
+            }
+            for (String mappingFile : descriptor.getMappingFileNames()) {
+                builder.mappingFile(mappingFile);
+            }
+            if (descriptor.getProperties() != null) {
+                for (Entry<Object, Object> entry : descriptor.getProperties().entrySet()) {
+                    if (!(entry.getKey() instanceof String key) || !(entry.getValue() instanceof String value)) {
+                        logger.debugf("Skipping non-String property from persistence.xml unit '%s': %s=%s", puName, entry.getKey(), entry.getValue());
+                        continue;
+                    }
+                    if (DATASOURCE_PROPERTIES.contains(key)) {
+                        logger.debugf("Skipping datasource property '%s' from persistence.xml unit '%s' -- datasource is handled via AdditionalPersistenceUnitBuildItem.dataSourceName('%s')", key, puName, datasourceName);
+                        continue;
+                    }
+                    if (AvailableSettings.DIALECT.equals(key)) {
+                        builder.dialect(value);
+                        continue;
+                    }
+                    builder.property(key, value);
+                }
+            }
+            producer.produce(builder.build());
         }
     }
 
@@ -665,7 +620,7 @@ class KeycloakProcessor {
     @Consume(ConfigBuildItem.class)
     @Consume(CryptoProviderInitBuildItem.class)
     @Produce(KeycloakSessionFactoryPreInitBuildItem.class)
-    SyntheticBeanBuildItem configureKeycloakSessionFactory(KeycloakRecorder recorder, List<PersistenceXmlDescriptorBuildItem> descriptors) {
+    SyntheticBeanBuildItem configureKeycloakSessionFactory(KeycloakRecorder recorder, List<AdditionalPersistenceUnitBuildItem> additionalPUs) {
         Map<Spi, Map<Class<? extends Provider>, Map<String, Class<? extends ProviderFactory>>>> factories = new HashMap<>();
         Map<Class<? extends Provider>, String> defaultProviders = new HashMap<>();
         Map<String, ProviderFactory> preConfiguredProviders = new HashMap<>();
@@ -685,7 +640,7 @@ class KeycloakProcessor {
             }
 
             if (spi instanceof JpaConnectionSpi) {
-                configureUserDefinedPersistenceUnits(descriptors, factories, preConfiguredProviders, spi);
+                configureUserDefinedPersistenceUnits(additionalPUs, factories, preConfiguredProviders, spi);
             }
 
             if (spi instanceof ThemeResourceSpi) {
@@ -730,21 +685,16 @@ class KeycloakProcessor {
         }
     }
 
-    private void configureUserDefinedPersistenceUnits(List<PersistenceXmlDescriptorBuildItem> descriptors,
+    private void configureUserDefinedPersistenceUnits(List<AdditionalPersistenceUnitBuildItem> additionalPUs,
             Map<Spi, Map<Class<? extends Provider>, Map<String, Class<? extends ProviderFactory>>>> factories,
             Map<String, ProviderFactory> preConfiguredProviders, Spi spi) {
-        descriptors.stream()
-                .map(PersistenceXmlDescriptorBuildItem::getDescriptor)
-                .map(PersistenceUnitDescriptor::getName)
-                .filter(Predicate.not(DEFAULT_PERSISTENCE_UNIT::equals))
-                .forEach((String unitName) -> {
-                    NamedJpaConnectionProviderFactory factory = new NamedJpaConnectionProviderFactory();
-
-                    factory.setUnitName(unitName);
-
-                    factories.get(spi).get(JpaConnectionProvider.class).put(unitName, NamedJpaConnectionProviderFactory.class);
-                    preConfiguredProviders.put(unitName, factory);
-                });
+        for (AdditionalPersistenceUnitBuildItem pu : additionalPUs) {
+            String unitName = pu.getPersistenceUnitName();
+            NamedJpaConnectionProviderFactory factory = new NamedJpaConnectionProviderFactory();
+            factory.setUnitName(unitName);
+            factories.get(spi).get(JpaConnectionProvider.class).put(unitName, NamedJpaConnectionProviderFactory.class);
+            preConfiguredProviders.put(unitName, factory);
+        }
     }
 
     /**

@@ -4,30 +4,24 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
-import org.keycloak.Config;
-import org.keycloak.quarkus.runtime.Environment;
-import org.keycloak.quarkus.runtime.configuration.ConfigArgsConfigSource;
-import org.keycloak.quarkus.runtime.configuration.Configuration;
-import org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider;
-
-import io.smallrye.config.SmallRyeConfig;
-import org.hibernate.cfg.AvailableSettings;
-import org.hibernate.cfg.JdbcSettings;
-import org.hibernate.jpa.boot.internal.ParsedPersistenceXmlDescriptor;
+import org.hibernate.jpa.boot.spi.PersistenceUnitDescriptor;
 import org.hibernate.jpa.boot.spi.PersistenceXmlParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import static org.keycloak.quarkus.deployment.KeycloakProcessor.configurePersistenceUnitProperties;
+import io.quarkus.hibernate.orm.deployment.spi.AdditionalPersistenceUnitBuildItem;
+
 import static org.keycloak.quarkus.deployment.KeycloakProcessor.getDatasourceNameFromPersistenceXml;
+import static org.keycloak.quarkus.runtime.storage.database.jpa.QuarkusJpaConnectionProviderFactory.DEFAULT_PERSISTENCE_UNIT;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.wildfly.common.Assert.assertNotNull;
 
 public class PersistenceXmlDatasourcesTest {
@@ -51,220 +45,132 @@ public class PersistenceXmlDatasourcesTest {
 
     @Test
     public void datasourceNamesOrder() throws IOException {
-        // use Jakarta property
-        var content = """
+        assertUsedName("""
                 <persistence-unit name="user-store-pu" transaction-type="JTA">
                     <properties>
                         <property name="jakarta.persistence.jtaDataSource" value="user-store" />
                     </properties>
                 </persistence-unit>
-                """;
-        assertUsedName(content, "user-store");
+                """, "user-store");
 
-        // use Hibernate property
-        content = """
+        assertUsedName("""
                 <persistence-unit name="user-store-pu" transaction-type="JTA">
                     <properties>
                         <property name="hibernate.connection.datasource" value="my-store" />
                     </properties>
                 </persistence-unit>
-                """;
-        assertUsedName(content, "my-store");
+                """, "my-store");
 
-        // use persistence unit name
-        content = """
+        assertUsedName("""
                 <persistence-unit name="user-store-pu" transaction-type="JTA">
                 </persistence-unit>
-                """;
-        assertUsedName(content, "user-store-pu");
+                """, "user-store-pu");
 
-        // prefer Jakarta property
-        content = """
+        assertUsedName("""
                 <persistence-unit name="user-store-pu" transaction-type="JTA">
                     <properties>
                         <property name="jakarta.persistence.jtaDataSource" value="user-store" />
                         <property name="hibernate.connection.datasource" value="my-store" />
                     </properties>
                 </persistence-unit>
-                """;
-        assertUsedName(content, "user-store");
+                """, "user-store");
 
-        // prefer Hibernate property as not accepting nonJta datasource
-        content = """
+        assertUsedName("""
                 <persistence-unit name="user-store-pu" transaction-type="JTA">
                     <properties>
                         <property name="jakarta.persistence.nonJtaDataSource" value="user-store" />
                         <property name="hibernate.connection.datasource" value="my-store" />
                     </properties>
                 </persistence-unit>
-                """;
-        assertUsedName(content, "my-store");
+                """, "my-store");
     }
 
     @Test
-    public void transactionTypes() throws IOException {
-        // not specified transaction-type -> error
-        var content = """
-                <persistence-unit name="user-store-pu">
-                    <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
-                    </properties>
+    public void reservedNameRejected() throws IOException {
+        assertPersistenceXmlSingleDS("""
+                <persistence-unit name="keycloak-default" transaction-type="JTA">
                 </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            var exception = assertThrows(IllegalArgumentException.class, () -> configurePersistenceUnitProperties("user-store", descriptor));
-            assertThat(exception.getMessage(), is("You need to use 'JTA' transaction type in your persistence.xml file."));
-        });
-
-        // jta data source is specified, so the tx type is JTA by default -> ok
-        content = """
-                <persistence-unit name="user-store-pu">
-                    <jta-data-source>JDBC/something</jta-data-source>
-                    <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
-                    </properties>
-                </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            assertDoesNotThrow(() -> configurePersistenceUnitProperties("user-store", descriptor));
-        });
-
-        // tx type is set to RESOURCE_LOCAL -> error
-        content = """
-                <persistence-unit name="user-store-pu" transaction-type="RESOURCE_LOCAL">
-                    <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
-                    </properties>
-                </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            var exception = assertThrows(IllegalArgumentException.class, () -> configurePersistenceUnitProperties("user-store", descriptor));
-            assertThat(exception.getMessage(), is("You need to use 'JTA' transaction type in your persistence.xml file."));
-        });
-
-        // Jakarta TX prop is set to RESOURCE_LOCAL -> error
-        content = """
-                <persistence-unit name="user-store-pu">
-                    <jta-data-source>JDBC/something</jta-data-source>
-                    <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
-                        <property name="jakarta.persistence.transactionType" value="RESOURCE_LOCAL" />
-                    </properties>
-                </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            var exception = assertThrows(IllegalArgumentException.class, () -> configurePersistenceUnitProperties("user-store", descriptor));
-            assertThat(exception.getMessage(), is("You need to use 'JTA' transaction type in your persistence.xml file."));
-        });
-
-        // Everything is correct, we can check if the Jakarta prop is automatically set -> ok
-        content = """
-                <persistence-unit name="user-store-pu" transaction-type="JTA">
-                    <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
-                    </properties>
-                </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            configurePersistenceUnitProperties("user-store", descriptor);
-            assertThat(descriptor.getProperties().getProperty(AvailableSettings.JAKARTA_TRANSACTION_TYPE), is("JTA"));
+                """, descriptor -> {
+            var exception = assertThrows(RuntimeException.class, () -> buildAdditionalPU(descriptor));
+            assertTrue(exception.getMessage().contains(DEFAULT_PERSISTENCE_UNIT));
         });
     }
 
     @Test
-    public void sqlProperties() throws IOException {
-        ConfigArgsConfigSource.setCliArgs("--db-kind-user-store=dev-mem", "--db-debug-jpql-user-store=true", "--db-log-slow-queries-threshold-user-store=7500");
-        initConfig();
-
-        var content = """
-                <persistence-unit name="user-store-pu" transaction-type="JTA">
+    public void buildItemPreservesProperties() throws IOException {
+        assertPersistenceXmlSingleDS("""
+                <persistence-unit name="my-store" transaction-type="JTA">
+                    <class>com.acme.MyEntity</class>
                     <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
+                        <property name="jakarta.persistence.jtaDataSource" value="my-ds" />
+                        <property name="hibernate.dialect" value="org.hibernate.dialect.H2Dialect" />
+                        <property name="hibernate.hbm2ddl.auto" value="update" />
+                        <property name="hibernate.show_sql" value="true" />
                     </properties>
                 </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            configurePersistenceUnitProperties("user-store", descriptor);
-            var properties = descriptor.getProperties();
+                """, descriptor -> {
+            var buildItem = buildAdditionalPU(descriptor);
 
-            assertThat(properties.getProperty(AvailableSettings.USE_SQL_COMMENTS), is("true"));
-            assertThat(properties.getProperty(AvailableSettings.LOG_SLOW_QUERY), is("7500"));
+            assertEquals("my-store", buildItem.getPersistenceUnitName());
+            assertEquals("my-ds", buildItem.getDataSourceName().orElse(null));
+            assertTrue(buildItem.getManagedClassNames().contains("com.acme.MyEntity"));
+
+            Map<String, String> props = buildItem.getProperties();
+            assertEquals("org.hibernate.dialect.H2Dialect", props.get("hibernate.dialect"));
+            assertEquals("update", props.get("hibernate.hbm2ddl.auto"));
+            assertEquals("true", props.get("hibernate.show_sql"));
         });
     }
 
     @Test
-    public void dialectAndSchema() throws IOException {
-        ConfigArgsConfigSource.setCliArgs("--db-kind-user-store=mariadb");
-        initConfig();
-
-        var content = """
-                <persistence-unit name="user-store-pu" transaction-type="JTA">
-                    <properties>
-                        <property name="jakarta.persistence.jtaDataSource" value="user-store" />
-                    </properties>
+    public void buildItemFallsBackToPuName() throws IOException {
+        assertPersistenceXmlSingleDS("""
+                <persistence-unit name="fallback-pu" transaction-type="JTA">
                 </persistence-unit>
-                """;
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            configurePersistenceUnitProperties("user-store", descriptor);
-            var properties = descriptor.getProperties();
-            assertThat(properties.getProperty(AvailableSettings.DIALECT), is("org.hibernate.dialect.MariaDBDialect"));
-            assertThat(properties.getProperty(AvailableSettings.DEFAULT_SCHEMA), is(nullValue()));
-        });
-
-        ConfigArgsConfigSource.setCliArgs("--db-kind-user-store=mariadb", "--db-schema-user-store=someSchema");
-        initConfig();
-
-        assertPersistenceXmlSingleDS(content, descriptor -> {
-            configurePersistenceUnitProperties("user-store", descriptor);
-            var properties = descriptor.getProperties();
-            assertThat(properties.getProperty(AvailableSettings.DIALECT), is("org.hibernate.dialect.MariaDBDialect"));
-            assertThat(properties.getProperty(AvailableSettings.DEFAULT_SCHEMA), is("someSchema"));
+                """, descriptor -> {
+            var buildItem = buildAdditionalPU(descriptor);
+            assertEquals("fallback-pu", buildItem.getDataSourceName().orElse(null));
         });
     }
 
-    private static void initConfig(){
-        Config.init(new MicroProfileConfigProvider(createConfig()));
-    }
-
-    // inspired in AbstractConfigurationTest in quarkus/runtime
-    private static SmallRyeConfig createConfig() {
-        Configuration.resetConfig();
-        Environment.getCurrentOrCreateFeatureProfile();
-        return Configuration.getConfig();
+    private static AdditionalPersistenceUnitBuildItem buildAdditionalPU(PersistenceUnitDescriptor descriptor) {
+        String puName = descriptor.getName();
+        if (DEFAULT_PERSISTENCE_UNIT.equals(puName)) {
+            throw new RuntimeException("User-defined persistence unit must not use the reserved name '" + DEFAULT_PERSISTENCE_UNIT + "'.");
+        }
+        String datasourceName = getDatasourceNameFromPersistenceXml(descriptor);
+        AdditionalPersistenceUnitBuildItem.Builder builder = AdditionalPersistenceUnitBuildItem.builder(puName)
+                .dataSourceName(datasourceName);
+        for (String className : descriptor.getManagedClassNames()) {
+            builder.managedClass(className);
+        }
+        if (descriptor.getProperties() != null) {
+            for (Map.Entry<Object, Object> entry : descriptor.getProperties().entrySet()) {
+                builder.property((String) entry.getKey(), (String) entry.getValue());
+            }
+        }
+        return builder.build();
     }
 
     private void assertUsedName(String content, String expectedName) throws IOException {
         assertPersistenceXmlSingleDS(content, descriptor -> {
-            var name = getDatasourceNameFromPersistenceXml(descriptor);
-            assertThat(name, is(expectedName));
-            configurePersistenceUnitProperties(name, descriptor);
-            var properties = descriptor.getProperties();
-            assertNotNull(properties);
-            assertThat(properties.getProperty(JdbcSettings.JAKARTA_JTA_DATASOURCE), is(expectedName));
-            assertThat(properties.getProperty(AvailableSettings.DATASOURCE), is(expectedName));
+            assertThat(getDatasourceNameFromPersistenceXml(descriptor), is(expectedName));
         });
     }
 
-    private void assertPersistenceXmlSingleDS(String content, Consumer<ParsedPersistenceXmlDescriptor> asserts) throws IOException {
-        assertPersistenceXml(content, descriptors -> {
+    private void assertPersistenceXmlSingleDS(String content, Consumer<PersistenceUnitDescriptor> asserts) throws IOException {
+        String xml = PERSISTENCE_XML_BODY.formatted(content);
+        Path file = null;
+        try {
+            file = Files.createTempFile("persistence", ".xml");
+            Files.writeString(file, xml);
+            List<PersistenceUnitDescriptor> descriptors = List.copyOf(parser.parse(List.of(file.toUri().toURL())).values());
             assertNotNull(descriptors);
             assertThat(descriptors.size(), is(1));
-            var descriptor = descriptors.get(0);
-            assertNotNull(descriptor);
-            asserts.accept(descriptor);
-        });
-    }
-
-    private void assertPersistenceXml(String content, Consumer<List<ParsedPersistenceXmlDescriptor>> asserts) throws IOException {
-        String finalPersistenceXmlFileContent = PERSISTENCE_XML_BODY.formatted(content);
-        Path persistenceXmlFile = null;
-        try {
-            persistenceXmlFile = Files.createTempFile("persistence", ".xml");
-            Files.writeString(persistenceXmlFile, finalPersistenceXmlFileContent);
-            asserts.accept(parser.parse(List.of(persistenceXmlFile.toUri().toURL())).values().stream().map(f -> (ParsedPersistenceXmlDescriptor) f).toList());
+            asserts.accept(descriptors.get(0));
         } finally {
-            if (persistenceXmlFile != null) {
-                Files.deleteIfExists(persistenceXmlFile);
+            if (file != null) {
+                Files.deleteIfExists(file);
             }
         }
     }
