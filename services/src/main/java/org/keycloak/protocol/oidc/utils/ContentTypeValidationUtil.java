@@ -4,6 +4,11 @@ import jakarta.ws.rs.NotSupportedException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 
+import jakarta.ws.rs.core.Response;
+
+import org.keycloak.events.Errors;
+import org.keycloak.services.ErrorResponseException;
+
 // FIXME: drop when ... is fixed
 public final class ContentTypeValidationUtil {
 
@@ -16,12 +21,10 @@ public final class ContentTypeValidationUtil {
         try {
             requestMediaType = MediaType.valueOf(contentType);
         } catch (IllegalArgumentException e) {
-            throw new NotSupportedException(
-                    "The content-type header value did not correspond to a valid media type");
+            throw new ErrorResponseException(Errors.INVALID_REQUEST, "The content-type header value did not correspond to a valid media type", Response.Status.BAD_REQUEST);
         }
         if (!requestMediaType.isCompatible(requiredMediaType)) {
-            throw new NotSupportedException(
-                    "The content-type header value does not match consumed media type " + requiredMediaType);
+            throw new ErrorResponseException(Errors.INVALID_REQUEST, "The content-type header value does not match consumed media type " + requiredMediaType, Response.Status.BAD_REQUEST);
         }
     }
 
