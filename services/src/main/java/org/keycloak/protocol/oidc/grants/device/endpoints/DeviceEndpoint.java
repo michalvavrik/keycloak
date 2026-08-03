@@ -105,7 +105,7 @@ public class DeviceEndpoint extends AuthorizationEndpointBase implements RealmRe
         // if you need to narrow this response to only specific endpoint, extract this mapper with 'handleDeviceRequest'
         // into a dedicated resource
 
-        // FIXME: drop when ... TODO ... gets fixed
+        // FIXME: report this to Quarkus
         CurrentRequestManager.get().setAllAnnotations(new Annotation[]{});
 
         return Response.status(400)
