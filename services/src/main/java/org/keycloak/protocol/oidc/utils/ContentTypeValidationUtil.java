@@ -11,6 +11,11 @@ import org.keycloak.services.ErrorResponseException;
 public final class ContentTypeValidationUtil {
 
     public static void requireValidContentType(HttpHeaders headers, MediaType requiredMediaType) {
+        if (true) {
+            // just for a missing validation reproducer
+            return;
+        }
+
         String contentType = headers.getHeaderString(HttpHeaders.CONTENT_TYPE);
         if (contentType == null) {
             return;
