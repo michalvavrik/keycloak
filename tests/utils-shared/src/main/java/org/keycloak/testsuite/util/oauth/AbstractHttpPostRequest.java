@@ -80,6 +80,10 @@ public abstract class AbstractHttpPostRequest<T, R> {
 
         // If entity is null, don't set (no body)
         if (entity != null) {
+            if (headers.containsKey("Content-Type") && entity instanceof org.apache.http.entity.AbstractHttpEntity) {
+                ((org.apache.http.entity.AbstractHttpEntity) entity).setContentType(headers.get("Content-Type"));
+                post.removeHeaders("Content-Type");
+            }
             post.setEntity(entity);
         }
 
