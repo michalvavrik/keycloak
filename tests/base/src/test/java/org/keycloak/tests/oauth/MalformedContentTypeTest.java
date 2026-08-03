@@ -2,8 +2,6 @@ package org.keycloak.tests.oauth;
 
 import java.util.stream.Stream;
 
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.OAuthErrorException;
 import org.keycloak.models.OAuth2DeviceConfig;
 import org.keycloak.testframework.annotations.InjectRealm;
@@ -24,6 +22,9 @@ import org.keycloak.testsuite.util.oauth.ParResponse;
 import org.keycloak.testsuite.util.oauth.TokenRevocationResponse;
 import org.keycloak.testsuite.util.oauth.ciba.AuthenticationRequestAcknowledgement;
 import org.keycloak.testsuite.util.oauth.device.DeviceAuthorizationResponse;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

@@ -1,9 +1,7 @@
 package org.keycloak.protocol.oidc.utils;
 
-import jakarta.ws.rs.NotSupportedException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-
 import jakarta.ws.rs.core.Response;
 
 import org.keycloak.events.Errors;

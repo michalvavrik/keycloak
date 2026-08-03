@@ -30,10 +30,9 @@ import org.keycloak.models.BrowserSecurityHeaders;
 import org.keycloak.models.ContentSecurityPolicyBuilder;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
+import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 
 import org.jboss.logging.Logger;
-
-import org.keycloak.representations.idm.OAuth2ErrorRepresentation;
 
 import static jakarta.ws.rs.HttpMethod.HEAD;
 import static jakarta.ws.rs.HttpMethod.OPTIONS;

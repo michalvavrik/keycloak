@@ -20,8 +20,6 @@ package org.keycloak.protocol.oidc.grants.device.endpoints;
 import java.lang.annotation.Annotation;
 import java.util.Map;
 
-import io.quarkus.arc.impl.CurrentManagedContext;
-
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotSupportedException;
@@ -34,17 +32,8 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 
-import org.eclipse.microprofile.openapi.annotations.servers.Server;
-
-import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
-
-import org.jboss.resteasy.reactive.server.core.CurrentRequest;
-
-import org.jboss.resteasy.reactive.server.core.CurrentRequestManager;
-
 import org.keycloak.OAuthErrorException;
 import org.keycloak.common.util.Base64Url;
-import org.keycloak.common.util.ObjectUtil;
 import org.keycloak.common.util.SecretGenerator;
 import org.keycloak.events.Details;
 import org.keycloak.events.Errors;
@@ -85,6 +74,8 @@ import org.keycloak.util.JsonSerialization;
 import org.keycloak.util.TokenUtil;
 
 import org.jboss.logging.Logger;
+import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
+import org.jboss.resteasy.reactive.server.core.CurrentRequestManager;
 
 import static org.keycloak.protocol.oidc.grants.device.DeviceGrantType.OAUTH2_DEVICE_USER_CODE;
 
