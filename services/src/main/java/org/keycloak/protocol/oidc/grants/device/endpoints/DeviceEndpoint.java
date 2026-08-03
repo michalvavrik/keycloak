@@ -106,7 +106,7 @@ public class DeviceEndpoint extends AuthorizationEndpointBase implements RealmRe
         // into a dedicated resource
 
         // FIXME: report this to Quarkus
-        CurrentRequestManager.get().setAllAnnotations(new Annotation[]{});
+//        CurrentRequestManager.get().setAllAnnotations(new Annotation[]{});
 
         return Response.status(400)
                 .entity(new OAuth2ErrorRepresentation(OAuthErrorException.INVALID_REQUEST, "Invalid Content-Type header"))
