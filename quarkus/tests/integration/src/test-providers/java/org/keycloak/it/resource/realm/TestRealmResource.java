@@ -34,6 +34,7 @@ import org.keycloak.models.dblock.DBLockProvider;
 import org.keycloak.quarkus.runtime.storage.database.jpa.QuarkusJpaConnectionProviderFactory;
 import org.keycloak.services.resource.RealmResourceProvider;
 
+import jakarta.enterprise.event.Event;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -41,6 +42,11 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkus.arc.Arc;
+import io.quarkus.tls.CertificateUpdatedEvent;
+import io.quarkus.tls.TlsConfiguration;
+import io.quarkus.tls.TlsConfigurationRegistry;
+import org.keycloak.quarkus.runtime.configuration.mappers.HttpPropertyMappers;
 import org.keycloak.util.JsonSerialization;
 
 /**
@@ -117,6 +123,25 @@ public class TestRealmResource implements RealmResourceProvider {
                 )
         );
         return Response.ok(rsp, MediaType.APPLICATION_JSON_TYPE).build();
+    }
+
+    @Path("tls-reload")
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response triggerTlsReload() {
+        try {
+            TlsConfigurationRegistry registry = Arc.container().instance(TlsConfigurationRegistry.class).get();
+            TlsConfiguration tlsConfig = registry.get(HttpPropertyMappers.TLS_BUCKET).orElseThrow();
+            tlsConfig.reload();
+            @SuppressWarnings("unchecked")
+            Event<CertificateUpdatedEvent> event = (Event<CertificateUpdatedEvent>) Arc.container()
+                    .beanManager().getEvent().select(CertificateUpdatedEvent.class);
+            event.fire(new CertificateUpdatedEvent(HttpPropertyMappers.TLS_BUCKET, tlsConfig));
+            return Response.ok("{\"reloaded\":true}", MediaType.APPLICATION_JSON).build();
+        } catch (Exception e) {
+            logger.error("TLS reload failed", e);
+            return Response.serverError().entity("{\"error\":\"" + e.getMessage() + "\"}").build();
+        }
     }
 
     @Override

@@ -53,6 +53,11 @@ This changes the behavior of identity provider account linking by email, of admi
 and of the verifiable credential offer emails of the experimental OID4VCI feature.
 The *Trust Email* setting of identity providers and LDAP federation is not affected, as it is an explicit decision of the administrator to trust the email from the external source.
 
+=== New option for encrypted PEM private keys
+
+A new `--https-certificate-key-file-password` option (env: `KC_HTTPS_CERTIFICATE_KEY_FILE_PASSWORD`) has been added to support encrypted PKCS#8 private keys in PEM format. If your PEM private key is encrypted, provide the decryption password using this option. The management interface has a corresponding `--https-management-certificate-key-file-password` option. Unencrypted PEM keys continue to work without any changes.
+
+
 // ------------------------ Deprecated features ------------------------ //
 == Deprecated features
 

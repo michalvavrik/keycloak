@@ -1,0 +1,146 @@
+/*
+ * Copyright 2026 Red Hat, Inc. and/or its affiliates
+ * and other contributors as indicated by the @author tags.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.keycloak.quarkus.runtime.configuration.mappers;
+
+import java.util.Map;
+
+import org.keycloak.quarkus.runtime.configuration.AbstractConfigurationTest;
+
+import org.junit.Test;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
+
+public class TlsStoreDispatchTest extends AbstractConfigurationTest {
+
+    @Test
+    public void detectPkcs12FromExtension() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.p12", null), is(HttpPropertyMappers.StoreType.PKCS12));
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.pfx", null), is(HttpPropertyMappers.StoreType.PKCS12));
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.pkcs12", null), is(HttpPropertyMappers.StoreType.PKCS12));
+    }
+
+    @Test
+    public void detectJksFromExtension() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.jks", null), is(HttpPropertyMappers.StoreType.JKS));
+    }
+
+    @Test
+    public void detectBcfksFromExtension() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.bcfks", null), is(HttpPropertyMappers.StoreType.OTHER));
+    }
+
+    @Test
+    public void explicitTypeOverridesExtension() {
+        assertThat(HttpPropertyMappers.detectStoreType("JKS", "server.p12", null), is(HttpPropertyMappers.StoreType.JKS));
+        assertThat(HttpPropertyMappers.detectStoreType("PKCS12", "server.jks", null), is(HttpPropertyMappers.StoreType.PKCS12));
+        assertThat(HttpPropertyMappers.detectStoreType("BCFKS", "server.p12", null), is(HttpPropertyMappers.StoreType.OTHER));
+    }
+
+    @Test
+    public void keystoreExtensionDetectedAsJks() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.keystore", HttpPropertyMappers.StoreRole.KEY_STORE),
+                is(HttpPropertyMappers.StoreType.JKS));
+    }
+
+    @Test
+    public void truststoreExtensionDetectedAsJks() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.truststore", HttpPropertyMappers.StoreRole.TRUST_STORE),
+                is(HttpPropertyMappers.StoreType.JKS));
+    }
+
+    @Test
+    public void keystoreExtensionNotValidForTrustStore() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.keystore", HttpPropertyMappers.StoreRole.TRUST_STORE) == null,
+                is(true));
+    }
+
+    @Test
+    public void truststoreExtensionNotValidForKeyStore() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.truststore", HttpPropertyMappers.StoreRole.KEY_STORE) == null,
+                is(true));
+    }
+
+    @Test
+    public void unrecognizedExtensionReturnsNull() {
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.ks", null) == null, is(true));
+        assertThat(HttpPropertyMappers.detectStoreType(null, "server.xyz", null) == null, is(true));
+    }
+
+    @Test
+    public void filterOtherStoreTypeReturnsNullForKnownTypes() {
+        assertThat(HttpPropertyMappers.filterOtherStoreType("PKCS12", null) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("P12", null) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("JKS", null) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("jks", null) == null, is(true));
+    }
+
+    @Test
+    public void filterOtherStoreTypeKeepsExoticTypes() {
+        assertThat(HttpPropertyMappers.filterOtherStoreType("BCFKS", null), is("BCFKS"));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("BKS", null), is("BKS"));
+    }
+
+    @Test
+    public void httpKeystorePasswordFollowsFileTypeBucket() {
+        createConfigFromCliArguments("--https-key-store-file=server.jks", "--https-key-store-password=secret");
+        assertExternalConfig(Map.of(
+                HttpPropertyMappers.TLS_PREFIX + "key-store.jks.path", "server.jks",
+                HttpPropertyMappers.TLS_PREFIX + "key-store.jks.password", "secret"
+        ));
+        assertExternalConfigNull(HttpPropertyMappers.TLS_PREFIX + "key-store.p12.password");
+        assertExternalConfigNull(HttpPropertyMappers.TLS_PREFIX + "key-store.other.password");
+    }
+
+    @Test
+    public void httpTrustStoreBcfksDispatch() {
+        createConfigFromCliArguments("--https-trust-store-file=trust.bcfks",
+                "--https-trust-store-type=BCFKS", "--https-trust-store-password=pass");
+        assertExternalConfig(Map.of(
+                HttpPropertyMappers.TLS_PREFIX + "trust-store.other.path", "trust.bcfks",
+                HttpPropertyMappers.TLS_PREFIX + "trust-store.other.password", "pass",
+                HttpPropertyMappers.TLS_PREFIX + "trust-store.other.type", "BCFKS"
+        ));
+        assertExternalConfigNull(HttpPropertyMappers.TLS_PREFIX + "trust-store.p12.path");
+        assertExternalConfigNull(HttpPropertyMappers.TLS_PREFIX + "trust-store.jks.path");
+    }
+
+    @Test
+    public void managementInheritsKeystoreTypeFromHttp() {
+        putEnvVar("KC_HEALTH_ENABLED", "true");
+        createConfigFromCliArguments("--https-key-store-file=server.jks",
+                "--https-key-store-password=pass", "--https-key-store-type=JKS");
+        assertConfig("https-management-key-store-type", "JKS");
+        assertExternalConfig(Map.of(
+                ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.jks.path", "server.jks",
+                ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.jks.password", "pass"
+        ));
+        assertExternalConfigNull(ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.other.type");
+    }
+
+    @Test
+    public void managementInheritsPkcs12TypeFromHttp() {
+        putEnvVar("KC_HEALTH_ENABLED", "true");
+        createConfigFromCliArguments("--https-key-store-file=server.p12", "--https-key-store-password=pass");
+        assertExternalConfig(Map.of(
+                ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.p12.path", "server.p12",
+                ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.p12.password", "pass"
+        ));
+        assertExternalConfigNull(ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.jks.path");
+        assertExternalConfigNull(ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.other.type");
+    }
+}

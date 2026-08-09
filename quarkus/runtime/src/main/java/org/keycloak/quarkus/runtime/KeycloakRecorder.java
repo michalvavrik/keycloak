@@ -48,7 +48,6 @@ import org.keycloak.config.HttpOptions;
 import org.keycloak.config.MetricsOptions;
 import org.keycloak.config.OpenApiOptions;
 import org.keycloak.config.Option;
-import org.keycloak.config.ProxyOptions;
 import org.keycloak.config.TruststoreOptions;
 import org.keycloak.marshalling.Marshalling;
 import org.keycloak.provider.Provider;
@@ -146,7 +145,7 @@ public class KeycloakRecorder {
     
     public void misdirectedRequestFilter(RuntimeValue<Router> runtimeValue) {
         // not checking for http/2 enablement - it is enabled by default and not exposed as a supported configuration option
-        if (!Configuration.isTrue(HttpPropertyMappers.QUARKUS_HTTPS_SNI) || !HttpPropertyMappers.isHttpsEnabled() || Configuration.getConfigValue(ProxyOptions.PROXY_HEADERS).getValue() != null) {
+        if (!HttpPropertyMappers.isSniEnabled()) {
             return;
         }
         

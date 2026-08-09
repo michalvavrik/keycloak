@@ -34,6 +34,8 @@ import org.keycloak.quarkus.runtime.KeycloakMain;
 import org.keycloak.quarkus.runtime.cli.command.AbstractAutoBuildCommand;
 import org.keycloak.quarkus.runtime.configuration.AbstractConfigurationTest;
 import org.keycloak.quarkus.runtime.configuration.PersistedConfigSource;
+import org.keycloak.quarkus.runtime.configuration.mappers.HttpPropertyMappers;
+import org.keycloak.quarkus.runtime.configuration.mappers.ManagementPropertyMappers;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Ignore;
@@ -95,15 +97,15 @@ public class PicocliTest extends AbstractConfigurationTest {
         NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
         assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
         assertEquals("1h",
-                nonRunningPicocli.config.getConfigValue("quarkus.http.ssl.certificate.reload-period").getValue());
+                nonRunningPicocli.config.getConfigValue(HttpPropertyMappers.TLS_PREFIX + "reload-period").getValue());
         assertEquals("1h",
-                nonRunningPicocli.config.getConfigValue("quarkus.management.ssl.certificate.reload-period").getValue());
+                nonRunningPicocli.config.getConfigValue(ManagementPropertyMappers.MGMT_TLS_PREFIX + "reload-period").getValue());
 
         onAfter();
         nonRunningPicocli = pseudoLaunch("start-dev", "--https-certificates-reload-period=-1");
         assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
-        assertNull(nonRunningPicocli.config.getConfigValue("quarkus.http.ssl.certificate.reload-period").getValue());
-        assertNull(nonRunningPicocli.config.getConfigValue("quarkus.management.ssl.certificate.reload-period").getValue());
+        assertNull(nonRunningPicocli.config.getConfigValue(HttpPropertyMappers.TLS_PREFIX + "reload-period").getValue());
+        assertNull(nonRunningPicocli.config.getConfigValue(ManagementPropertyMappers.MGMT_TLS_PREFIX + "reload-period").getValue());
     }
 
     @Test
@@ -111,18 +113,73 @@ public class PicocliTest extends AbstractConfigurationTest {
         NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
         assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
         assertEquals("1h",
-                nonRunningPicocli.config.getConfigValue("quarkus.management.ssl.certificate.reload-period").getValue());
+                nonRunningPicocli.config.getConfigValue(ManagementPropertyMappers.MGMT_TLS_PREFIX + "reload-period").getValue());
 
         onAfter();
         nonRunningPicocli = pseudoLaunch("start-dev", "--https-management-certificates-reload-period=-1");
         assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
-        assertNull(nonRunningPicocli.config.getConfigValue("quarkus.management.ssl.certificate.reload-period").getValue());
+        assertNull(nonRunningPicocli.config.getConfigValue(ManagementPropertyMappers.MGMT_TLS_PREFIX + "reload-period").getValue());
 
         onAfter();
         nonRunningPicocli = pseudoLaunch("start-dev", "--https-certificates-reload-period=5m");
         assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
         assertEquals("5m",
-                nonRunningPicocli.config.getConfigValue("quarkus.management.ssl.certificate.reload-period").getValue());
+                nonRunningPicocli.config.getConfigValue(ManagementPropertyMappers.MGMT_TLS_PREFIX + "reload-period").getValue());
+    }
+
+    @Test
+    public void testPemTakesPrecedenceOverKeystore() {
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev",
+                "--https-certificate-file=/cert.pem", "--https-certificate-key-file=/key.pem",
+                "--https-key-store-file=server.p12", "--https-key-store-password=pass");
+        assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
+        assertEquals("/cert.pem",
+                nonRunningPicocli.config.getConfigValue(HttpPropertyMappers.TLS_PREFIX + "key-store.pem.default.cert").getValue());
+        assertNull(nonRunningPicocli.config.getConfigValue(HttpPropertyMappers.TLS_PREFIX + "key-store.p12.path").getValue());
+    }
+
+    @Test
+    public void testPemRejectedInFipsMode() {
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev",
+                "--https-certificate-file=/cert.pem", "--https-certificate-key-file=/key.pem",
+                "--fips-mode=strict");
+        assertError(nonRunningPicocli, "PEM certificates are not supported in FIPS mode");
+    }
+
+    @Test
+    public void testPemRejectedInFipsNonStrictMode() {
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev",
+                "--https-certificate-file=/cert.pem", "--https-certificate-key-file=/key.pem",
+                "--fips-mode=non-strict");
+        assertError(nonRunningPicocli, "PEM certificates are not supported in FIPS mode");
+    }
+
+    @Test
+    public void testValidationWorksWithEnvVars() {
+        putEnvVars(Map.of(
+                "KC_HTTPS_CERTIFICATE_FILE", "/cert.pem",
+                "KC_HTTPS_CERTIFICATE_KEY_FILE", "/key.pem",
+                "KC_FIPS_MODE", "strict"
+        ));
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
+        assertError(nonRunningPicocli, "PEM certificates are not supported in FIPS mode");
+    }
+
+    @Test
+    public void testTrustStorePasswordRequiredForPkcs12() {
+        putEnvVar("KC_HTTPS_TRUST_STORE_FILE", "truststore.p12");
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
+        assertError(nonRunningPicocli, "No trust store password provided");
+    }
+
+    @Test
+    public void testTrustStorePasswordNotRequiredForBcfks() {
+        putEnvVars(Map.of(
+                "KC_HTTPS_TRUST_STORE_FILE", "truststore.bcfks",
+                "KC_HTTPS_TRUST_STORE_TYPE", "BCFKS"
+        ));
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
+        assertNoError(nonRunningPicocli);
     }
 
     @Test
