@@ -183,6 +183,38 @@ public class PicocliTest extends AbstractConfigurationTest {
     }
 
     @Test
+    public void testManagementPemRejectedInFipsMode() {
+        putEnvVars(Map.of(
+                "KC_HTTPS_MANAGEMENT_CERTIFICATE_FILE", "/mgmt-cert.pem",
+                "KC_HTTPS_MANAGEMENT_CERTIFICATE_KEY_FILE", "/mgmt-key.pem",
+                "KC_FIPS_MODE", "strict"
+        ));
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
+        assertError(nonRunningPicocli, "PEM certificates are not supported in FIPS mode");
+    }
+
+    @Test
+    public void testManagementTrustStorePasswordRequired() {
+        putEnvVars(Map.of(
+                "KC_HEALTH_ENABLED", "true",
+                "KC_HTTPS_MANAGEMENT_TRUST_STORE_FILE", "mgmt-trust.p12"
+        ));
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
+        assertError(nonRunningPicocli, "No trust store password provided");
+        assertError(nonRunningPicocli, "https-management-trust-store-password");
+    }
+
+    @Test
+    public void testManagementKeystoreUnrecognizedExtension() {
+        putEnvVars(Map.of(
+                "KC_HEALTH_ENABLED", "true",
+                "KC_HTTPS_MANAGEMENT_KEY_STORE_FILE", "mgmt.ks"
+        ));
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
+        assertError(nonRunningPicocli, "Unable to determine 'https-management-key-store-type' automatically");
+    }
+
+    @Test
     public void testInvalidArgumentType() {
         NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev", "--http-port=a");
         assertEquals(CommandLine.ExitCode.USAGE, nonRunningPicocli.exitCode);

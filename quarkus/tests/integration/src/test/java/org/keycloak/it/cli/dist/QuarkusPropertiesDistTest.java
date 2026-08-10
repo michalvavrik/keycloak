@@ -154,7 +154,7 @@ public class QuarkusPropertiesDistTest {
     @Order(13)
     void testHttpCertsPathTransformer(CLIResult cliResult) {
         cliResult.assertExitCode(1);
-        cliResult.assertMessage("Failed to load 'https-*' material: NoSuchFileException");
+        cliResult.assertMessage("cannot read the key/certificate files");
     }
 
     @Test
@@ -165,7 +165,7 @@ public class QuarkusPropertiesDistTest {
     @Order(14)
     void testHttpCertsPathTransformerOnWindows(CLIResult cliResult) {
         cliResult.assertExitCode(1);
-        cliResult.assertMessage("ERROR: Failed to load 'https-*' material: NoSuchFileException C:");
+        cliResult.assertMessage("cannot read the key/certificate files");
     }
 
     public static class AddConsoleHandlerFromQuarkusProps implements Consumer<RawKeycloakDistribution> {

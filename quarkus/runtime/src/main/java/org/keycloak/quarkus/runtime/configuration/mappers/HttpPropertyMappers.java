@@ -12,6 +12,7 @@ import org.keycloak.common.Profile;
 import org.keycloak.common.crypto.FipsMode;
 import org.keycloak.common.util.KeystoreUtil;
 import org.keycloak.config.HttpOptions;
+import org.keycloak.config.ManagementOptions;
 import org.keycloak.config.Option;
 import org.keycloak.config.OptionBuilder;
 import org.keycloak.config.OptionsUtil;
@@ -378,21 +379,26 @@ public final class HttpPropertyMappers implements PropertyMapperGrouping {
         }
         validateStoreType(HttpOptions.HTTPS_KEY_STORE_FILE, HttpOptions.HTTPS_KEY_STORE_TYPE, StoreRole.KEY_STORE);
         validateStoreType(HttpOptions.HTTPS_TRUST_STORE_FILE, HttpOptions.HTTPS_TRUST_STORE_TYPE, StoreRole.TRUST_STORE);
-        validateTrustStorePassword();
+        validateStoreType(ManagementOptions.HTTPS_MANAGEMENT_KEY_STORE_FILE, ManagementOptions.HTTPS_MANAGEMENT_KEY_STORE_TYPE, StoreRole.KEY_STORE);
+        validateStoreType(ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_FILE, ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_TYPE, StoreRole.TRUST_STORE);
+        validateTrustStorePassword(HttpOptions.HTTPS_TRUST_STORE_FILE, HttpOptions.HTTPS_TRUST_STORE_PASSWORD, HttpOptions.HTTPS_TRUST_STORE_TYPE);
+        validateTrustStorePassword(ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_FILE, ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_PASSWORD, ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_TYPE);
         validateNoFipsPem();
     }
 
-    private static void validateTrustStorePassword() {
-        String trustStoreFile = getOptionalKcValue(HttpOptions.HTTPS_TRUST_STORE_FILE.getKey()).orElse(null);
+    private static void validateTrustStorePassword(Option<File> trustStoreFileOption, Option<String> passwordOption,
+            Option<String> typeOption) {
+        String trustStoreFile = getOptionalKcValue(trustStoreFileOption.getKey()).orElse(null);
         if (trustStoreFile == null) {
             return;
         }
-        String explicitType = getOptionalKcValue(HttpOptions.HTTPS_TRUST_STORE_TYPE.getKey()).orElse(null);
+        String explicitType = getOptionalKcValue(typeOption.getKey()).orElse(null);
         StoreType type = detectStoreType(explicitType, trustStoreFile, StoreRole.TRUST_STORE);
         if (type == StoreType.PKCS12 || type == StoreType.JKS) {
-            String password = getOptionalKcValue(HttpOptions.HTTPS_TRUST_STORE_PASSWORD.getKey()).orElse(null);
+            String password = getOptionalKcValue(passwordOption.getKey()).orElse(null);
             if (password == null) {
-                throw new PropertyException("No trust store password provided. Set the 'https-trust-store-password' option.");
+                throw new PropertyException("No trust store password provided. Set the '%s' option."
+                        .formatted(passwordOption.getKey()));
             }
         }
     }
@@ -402,7 +408,8 @@ public final class HttpPropertyMappers implements PropertyMapperGrouping {
         if (fipsMode == null || FipsMode.DISABLED.toString().equals(fipsMode)) {
             return;
         }
-        if (getOptionalKcValue(HttpOptions.HTTPS_CERTIFICATE_FILE.getKey()).isPresent()) {
+        if (getOptionalKcValue(HttpOptions.HTTPS_CERTIFICATE_FILE.getKey()).isPresent()
+                || getOptionalKcValue(ManagementOptions.HTTPS_MANAGEMENT_CERTIFICATE_FILE.getKey()).isPresent()) {
             throw new PropertyException(
                     "PEM certificates are not supported in FIPS mode. Use a BCFKS keystore with the 'https-key-store-file' option instead.");
         }

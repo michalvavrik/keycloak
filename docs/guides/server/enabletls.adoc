@@ -50,10 +50,10 @@ As an alternative, you can use an existing keystore by running the following com
 Recognized file extensions for a keystore:
 
 * `.p12`, `.pkcs12`, and `.pfx` for a PKCS12 file
-* `.jks` for a JKS file
+* `.jks` and `.keystore` for a JKS file
 * `.bcfks` for a BCFKS file
 
-If your keystore does not have one of these extensions, it is treated as PKCS12. To override this, set the `https-key-store-type` option.
+If your keystore does not have one of these extensions, you must set the `https-key-store-type` option. Similarly, `.truststore` is recognized for trust stores.
 
 === Setting the Keystore password
 You can set a secure password for your keystore using the `https-key-store-password` option:
