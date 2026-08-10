@@ -560,8 +560,7 @@ public class ManagementConfigurationTest extends AbstractConfigurationTest {
                 "KC_FIPS_MODE", "strict",
                 "KC_HTTPS_KEY_STORE_FILE", "server.bcfks",
                 "KC_HTTPS_KEY_STORE_PASSWORD", "pass",
-                "KC_HTTPS_TRUST_STORE_FILE", "trust.bcfks",
-                "KC_HTTPS_TRUST_STORE_PASSWORD", "pass"
+                "KC_HTTPS_TRUST_STORE_FILE", "trust.bcfks"
         ));
         initConfig();
         assertExternalConfig(Map.of(

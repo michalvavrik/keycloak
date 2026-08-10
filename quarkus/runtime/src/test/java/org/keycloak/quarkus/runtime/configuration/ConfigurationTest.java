@@ -639,13 +639,13 @@ public class ConfigurationTest extends AbstractConfigurationTest {
     public void testHttpTrustStoreType() {
         String otherTypeProp = HttpPropertyMappers.TLS_PREFIX + "trust-store.other.type";
 
-        ConfigArgsConfigSource.setCliArgs("--fips-mode=strict", "--https-trust-store-file=trust.bcfks", "--https-trust-store-password=pass");
+        ConfigArgsConfigSource.setCliArgs("--fips-mode=strict", "--https-trust-store-file=trust.bcfks");
         assertEquals("BCFKS", createConfig().getConfigValue(otherTypeProp).getValue());
 
         ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=jks", "--https-trust-store-file=trust.jks", "--https-trust-store-password=pass");
         assertNull(createConfig().getConfigValue(otherTypeProp).getValue());
 
-        ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=BCFKS", "--https-trust-store-file=trust.bcfks", "--https-trust-store-password=pass");
+        ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=BCFKS", "--https-trust-store-file=trust.bcfks");
         assertEquals("BCFKS", createConfig().getConfigValue(otherTypeProp).getValue());
     }
 
