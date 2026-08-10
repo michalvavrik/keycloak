@@ -421,7 +421,12 @@ public final class HttpPropertyMappers implements PropertyMapperGrouping {
             return;
         }
         String explicitType = getOptionalKcValue(storeTypeOption.getKey()).orElse(null);
-        if (detectStoreType(explicitType, filePath, role) == null) {
+        StoreType detected = detectStoreType(explicitType, filePath, role);
+        if (detected == null) {
+            throw new PropertyException("Unable to determine '%s' automatically. Adjust the file extension or specify the property."
+                    .formatted(storeTypeOption.getKey()));
+        }
+        if (detected == StoreType.OTHER && explicitType == null) {
             throw new PropertyException("Unable to determine '%s' automatically. Adjust the file extension or specify the property."
                     .formatted(storeTypeOption.getKey()));
         }

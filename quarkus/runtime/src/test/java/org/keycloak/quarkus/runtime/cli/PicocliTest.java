@@ -205,6 +205,13 @@ public class PicocliTest extends AbstractConfigurationTest {
     }
 
     @Test
+    public void testBcfksRequiresExplicitType() {
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev",
+                "--https-key-store-file=server.bcfks", "--https-key-store-password=pass");
+        assertError(nonRunningPicocli, "Unable to determine 'https-key-store-type' automatically");
+    }
+
+    @Test
     public void testManagementKeystoreUnrecognizedExtension() {
         putEnvVars(Map.of(
                 "KC_HEALTH_ENABLED", "true",
