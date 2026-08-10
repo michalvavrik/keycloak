@@ -154,7 +154,9 @@ public class QuarkusPropertiesDistTest {
     @Order(13)
     void testHttpCertsPathTransformer(CLIResult cliResult) {
         cliResult.assertExitCode(1);
+        cliResult.assertMessage("Invalid key/certificate pair configuration");
         cliResult.assertMessage("cannot read the key/certificate files");
+        cliResult.assertMessage("server.crt.pem");
     }
 
     @Test
@@ -165,7 +167,9 @@ public class QuarkusPropertiesDistTest {
     @Order(14)
     void testHttpCertsPathTransformerOnWindows(CLIResult cliResult) {
         cliResult.assertExitCode(1);
+        cliResult.assertMessage("Invalid key/certificate pair configuration");
         cliResult.assertMessage("cannot read the key/certificate files");
+        cliResult.assertMessage("server.crt.pem");
     }
 
     public static class AddConsoleHandlerFromQuarkusProps implements Consumer<RawKeycloakDistribution> {
