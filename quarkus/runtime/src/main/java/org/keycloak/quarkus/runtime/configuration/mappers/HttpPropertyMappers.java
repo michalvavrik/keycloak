@@ -234,7 +234,7 @@ public final class HttpPropertyMappers implements PropertyMapperGrouping {
                 fromOption(HttpOptions.HTTPS_KEY_STORE_TYPE)
                         .mapFrom(SecurityOptions.FIPS_MODE, HttpPropertyMappers::resolveKeyStoreType)
                         .to(TLS_PREFIX + "key-store.other.type")
-                        .transformer(HttpPropertyMappers::filterOtherStoreType)
+                        .transformer((value, ctx) -> filterOtherStoreType(value, HttpOptions.HTTPS_KEY_STORE_FILE))
                         .paramLabel("type")
                         .build()
         );
@@ -272,7 +272,7 @@ public final class HttpPropertyMappers implements PropertyMapperGrouping {
                 fromOption(HttpOptions.HTTPS_TRUST_STORE_TYPE)
                         .mapFrom(SecurityOptions.FIPS_MODE, HttpPropertyMappers::resolveKeyStoreType)
                         .to(TLS_PREFIX + "trust-store.other.type")
-                        .transformer(HttpPropertyMappers::filterOtherStoreType)
+                        .transformer((value, ctx) -> filterOtherStoreType(value, HttpOptions.HTTPS_TRUST_STORE_FILE))
                         .paramLabel("type")
                         .build()
         );
@@ -362,11 +362,15 @@ public final class HttpPropertyMappers implements PropertyMapperGrouping {
         return StoreType.PKCS12;
     }
 
-    static String filterOtherStoreType(String value, ConfigSourceInterceptorContext context) {
+    static String filterOtherStoreType(String value, Option<File> storeFileOption) {
         if (value == null) {
             return null;
         }
-        return detectStoreType(value, null, null) == StoreType.OTHER ? value : null;
+        if (detectStoreType(value, null, null) != StoreType.OTHER) {
+            return null;
+        }
+        // only set the type if the corresponding file is configured
+        return getOptionalKcValue(storeFileOption.getKey()).isPresent() ? value : null;
     }
 
     @Override

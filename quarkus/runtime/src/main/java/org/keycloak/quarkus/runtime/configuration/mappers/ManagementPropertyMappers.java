@@ -200,7 +200,7 @@ public class ManagementPropertyMappers implements PropertyMapperGrouping {
                 fromOption(ManagementOptions.HTTPS_MANAGEMENT_KEY_STORE_TYPE)
                         .isEnabled(ManagementPropertyMappers::isInheritedScheme, HTTP_MANAGEMENT_SCHEME_IS_INHERITED)
                         .mapFrom(ManagementOptions.HTTPS_MANAGEMENT_KEY_STORE_TYPE, (name, value, context) ->
-                                HttpPropertyMappers.filterOtherStoreType(value, context))
+                                HttpPropertyMappers.filterOtherStoreType(value, ManagementOptions.HTTPS_MANAGEMENT_KEY_STORE_FILE))
                         .to(MGMT_TLS_PREFIX + "key-store.other.type")
                         .paramLabel("type")
                         .build()
@@ -264,7 +264,7 @@ public class ManagementPropertyMappers implements PropertyMapperGrouping {
                 fromOption(ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_TYPE)
                         .isEnabled(ManagementPropertyMappers::isInheritedScheme, HTTP_MANAGEMENT_SCHEME_IS_INHERITED)
                         .mapFrom(ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_TYPE, (name, value, context) ->
-                                HttpPropertyMappers.filterOtherStoreType(value, context))
+                                HttpPropertyMappers.filterOtherStoreType(value, ManagementOptions.HTTPS_MANAGEMENT_TRUST_STORE_FILE))
                         .to(MGMT_TLS_PREFIX + "trust-store.other.type")
                         .paramLabel("type")
                         .build()

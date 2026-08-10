@@ -18,6 +18,7 @@ package org.keycloak.quarkus.runtime.configuration.mappers;
 
 import java.util.Map;
 
+import org.keycloak.config.HttpOptions;
 import org.keycloak.quarkus.runtime.configuration.AbstractConfigurationTest;
 
 import org.junit.Test;
@@ -83,16 +84,21 @@ public class TlsStoreDispatchTest extends AbstractConfigurationTest {
 
     @Test
     public void filterOtherStoreTypeReturnsNullForKnownTypes() {
-        assertThat(HttpPropertyMappers.filterOtherStoreType("PKCS12", null) == null, is(true));
-        assertThat(HttpPropertyMappers.filterOtherStoreType("P12", null) == null, is(true));
-        assertThat(HttpPropertyMappers.filterOtherStoreType("JKS", null) == null, is(true));
-        assertThat(HttpPropertyMappers.filterOtherStoreType("jks", null) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("PKCS12", HttpOptions.HTTPS_KEY_STORE_FILE) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("P12", HttpOptions.HTTPS_KEY_STORE_FILE) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("JKS", HttpOptions.HTTPS_KEY_STORE_FILE) == null, is(true));
+        assertThat(HttpPropertyMappers.filterOtherStoreType("jks", HttpOptions.HTTPS_KEY_STORE_FILE) == null, is(true));
     }
 
     @Test
-    public void filterOtherStoreTypeKeepsExoticTypes() {
-        assertThat(HttpPropertyMappers.filterOtherStoreType("BCFKS", null), is("BCFKS"));
-        assertThat(HttpPropertyMappers.filterOtherStoreType("BKS", null), is("BKS"));
+    public void filterOtherStoreTypeKeepsExoticTypesWhenFileSet() {
+        createConfigFromCliArguments("--https-key-store-file=server.bcfks", "--https-key-store-type=BCFKS");
+        assertThat(HttpPropertyMappers.filterOtherStoreType("BCFKS", HttpOptions.HTTPS_KEY_STORE_FILE), is("BCFKS"));
+    }
+
+    @Test
+    public void filterOtherStoreTypeReturnsNullWithoutFile() {
+        assertThat(HttpPropertyMappers.filterOtherStoreType("BCFKS", HttpOptions.HTTPS_KEY_STORE_FILE) == null, is(true));
     }
 
     @Test

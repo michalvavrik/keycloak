@@ -545,7 +545,9 @@ public class ManagementConfigurationTest extends AbstractConfigurationTest {
         assertExternalConfigNull(ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.other.type");
 
         putEnvVars(Map.of(
-                "KC_HTTPS_MANAGEMENT_KEY_STORE_TYPE", "BCFKS"
+                "KC_HTTPS_MANAGEMENT_KEY_STORE_TYPE", "BCFKS",
+                "KC_HTTPS_MANAGEMENT_KEY_STORE_FILE", "mgmt.bcfks",
+                "KC_HTTPS_MANAGEMENT_KEY_STORE_PASSWORD", "pass"
         ));
         initConfig();
         assertExternalConfig(ManagementPropertyMappers.MGMT_TLS_PREFIX + "key-store.other.type", "BCFKS");
@@ -554,7 +556,13 @@ public class ManagementConfigurationTest extends AbstractConfigurationTest {
     @Test
     public void managementFipsKeystoreTypeMappedToOther() {
         makeInterfaceOccupied();
-        putEnvVar("KC_FIPS_MODE", "strict");
+        putEnvVars(Map.of(
+                "KC_FIPS_MODE", "strict",
+                "KC_HTTPS_KEY_STORE_FILE", "server.bcfks",
+                "KC_HTTPS_KEY_STORE_PASSWORD", "pass",
+                "KC_HTTPS_TRUST_STORE_FILE", "trust.bcfks",
+                "KC_HTTPS_TRUST_STORE_PASSWORD", "pass"
+        ));
         initConfig();
         assertExternalConfig(Map.of(
                 HttpPropertyMappers.TLS_PREFIX + "key-store.other.type", "BCFKS",

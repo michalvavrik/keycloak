@@ -639,13 +639,13 @@ public class ConfigurationTest extends AbstractConfigurationTest {
     public void testHttpTrustStoreType() {
         String otherTypeProp = HttpPropertyMappers.TLS_PREFIX + "trust-store.other.type";
 
-        ConfigArgsConfigSource.setCliArgs("--fips-mode=strict");
+        ConfigArgsConfigSource.setCliArgs("--fips-mode=strict", "--https-trust-store-file=trust.bcfks", "--https-trust-store-password=pass");
         assertEquals("BCFKS", createConfig().getConfigValue(otherTypeProp).getValue());
 
-        ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=jks");
+        ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=jks", "--https-trust-store-file=trust.jks", "--https-trust-store-password=pass");
         assertNull(createConfig().getConfigValue(otherTypeProp).getValue());
 
-        ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=BCFKS");
+        ConfigArgsConfigSource.setCliArgs("--https-trust-store-type=BCFKS", "--https-trust-store-file=trust.bcfks", "--https-trust-store-password=pass");
         assertEquals("BCFKS", createConfig().getConfigValue(otherTypeProp).getValue());
     }
 
@@ -1267,7 +1267,7 @@ public class ConfigurationTest extends AbstractConfigurationTest {
         initConfig();
         assertExternalConfigNull(HttpPropertyMappers.TLS_PREFIX + "key-store.other.type");
 
-        ConfigArgsConfigSource.setCliArgs("--https-key-store-type=BCFKS");
+        ConfigArgsConfigSource.setCliArgs("--https-key-store-type=BCFKS", "--https-key-store-file=server.bcfks", "--https-key-store-password=pass");
         initConfig();
         assertExternalConfig(HttpPropertyMappers.TLS_PREFIX + "key-store.other.type", "BCFKS");
     }
