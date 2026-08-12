@@ -23,12 +23,13 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.Test;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.startsWith;
 import static org.keycloak.tests.cookies.CookieAssertions.assertCookie;
 import static org.keycloak.tests.cookies.CookieAssertions.assertSetCookieCount;
 import static org.keycloak.tests.cookies.CookieAssertions.getSetCookieHeader;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.startsWith;
 
 @KeycloakIntegrationTest(config = CustomProvidersServerConfig.class)
 class DefaultCookieProviderTest {

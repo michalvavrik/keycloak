@@ -12,11 +12,11 @@ import org.keycloak.testframework.annotations.InjectHttpClient;
 import org.keycloak.testframework.annotations.InjectKeycloakUrls;
 import org.keycloak.testframework.annotations.InjectRealm;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
-import org.keycloak.testframework.injection.LifeCycle;
 import org.keycloak.testframework.https.CertificatesConfig;
 import org.keycloak.testframework.https.CertificatesConfigBuilder;
 import org.keycloak.testframework.https.InjectCertificates;
 import org.keycloak.testframework.https.ManagedCertificates;
+import org.keycloak.testframework.injection.LifeCycle;
 import org.keycloak.testframework.oauth.OAuthClient;
 import org.keycloak.testframework.oauth.annotations.InjectOAuthClient;
 import org.keycloak.testframework.realm.ManagedRealm;
@@ -75,12 +75,12 @@ class CookieTest {
 
     @Test
     void testCookieValue() throws Exception {
-        loginAndThen(() -> {});
+        assertCookieValueDoesNotAuthenticate(() -> {});
     }
 
     @Test
     void testCookieValueLoggedOut() throws Exception {
-        loginAndThen(() -> AccountHelper.logout(realm.admin(), "test-user@localhost"));
+        assertCookieValueDoesNotAuthenticate(() -> AccountHelper.logout(realm.admin(), "test-user@localhost"));
     }
 
     @Test
@@ -121,19 +121,15 @@ class CookieTest {
         }
     }
 
-    private void loginAndThen(Runnable afterLogin) throws Exception {
+    private void assertCookieValueDoesNotAuthenticate(Runnable afterLogin) throws Exception {
         AuthorizationEndpointResponse codeResponse = oauth.doLogin("test-user@localhost", "password");
         AccessTokenResponse accTokenResp = oauth.doAccessTokenRequest(codeResponse.getCode());
         assertThat("Login should succeed", oauth.parseLoginResponse().isSuccess(), is(true));
 
         afterLogin.run();
 
-        assertCookieValueDoesNotAuthenticate(CookieType.IDENTITY.getName(), accTokenResp.getAccessToken());
-    }
-
-    private void assertCookieValueDoesNotAuthenticate(String cookieName, String cookieValue) throws IOException {
         BasicCookieStore cookieStore = new BasicCookieStore();
-        BasicClientCookie cookie = new BasicClientCookie(cookieName, cookieValue);
+        BasicClientCookie cookie = new BasicClientCookie(CookieType.IDENTITY.getName(), accTokenResp.getAccessToken());
         cookie.setDomain("localhost");
         cookie.setPath("/");
         cookieStore.addCookie(cookie);
