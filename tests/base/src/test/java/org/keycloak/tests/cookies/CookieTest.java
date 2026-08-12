@@ -83,16 +83,6 @@ class CookieTest {
         loginAndThen(() -> AccountHelper.logout(realm.admin(), "test-user@localhost"));
     }
 
-    private void loginAndThen(Runnable afterLogin) throws Exception {
-        AuthorizationEndpointResponse codeResponse = oauth.doLogin("test-user@localhost", "password");
-        AccessTokenResponse accTokenResp = oauth.doAccessTokenRequest(codeResponse.getCode());
-        assertThat("Login should succeed", oauth.parseLoginResponse().isSuccess(), is(true));
-
-        afterLogin.run();
-
-        assertCookieValueDoesNotAuthenticate(CookieType.IDENTITY.getName(), accTokenResp.getAccessToken());
-    }
-
     @Test
     void testNoDuplicationsWhenExpiringCookies() throws IOException {
         assertThat("Server must be running with TLS", keycloakUrls.getBase(), startsWith("https"));
@@ -129,6 +119,16 @@ class CookieTest {
 
             }
         }
+    }
+
+    private void loginAndThen(Runnable afterLogin) throws Exception {
+        AuthorizationEndpointResponse codeResponse = oauth.doLogin("test-user@localhost", "password");
+        AccessTokenResponse accTokenResp = oauth.doAccessTokenRequest(codeResponse.getCode());
+        assertThat("Login should succeed", oauth.parseLoginResponse().isSuccess(), is(true));
+
+        afterLogin.run();
+
+        assertCookieValueDoesNotAuthenticate(CookieType.IDENTITY.getName(), accTokenResp.getAccessToken());
     }
 
     private void assertCookieValueDoesNotAuthenticate(String cookieName, String cookieValue) throws IOException {
