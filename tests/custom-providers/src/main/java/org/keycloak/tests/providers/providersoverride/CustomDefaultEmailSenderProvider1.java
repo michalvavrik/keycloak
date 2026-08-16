@@ -17,17 +17,20 @@
  *
  */
 
-package org.keycloak.examples.providersoverride;
+package org.keycloak.tests.providers.providersoverride;
 
-import org.keycloak.forms.login.freemarker.FreeMarkerLoginFormsProvider;
+import java.util.Map;
+
+import org.keycloak.email.DefaultEmailSenderProvider;
+import org.keycloak.email.EmailAuthenticator;
 import org.keycloak.models.KeycloakSession;
 
 /**
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
  */
-public class CustomLoginFormsProvider extends FreeMarkerLoginFormsProvider {
+public class CustomDefaultEmailSenderProvider1 extends DefaultEmailSenderProvider {
 
-    public CustomLoginFormsProvider(KeycloakSession session) {
-        super(session);
+    public CustomDefaultEmailSenderProvider1(KeycloakSession session, Map<EmailAuthenticator.AuthenticatorType, EmailAuthenticator> authenticators) {
+        super(session, authenticators);
     }
 }

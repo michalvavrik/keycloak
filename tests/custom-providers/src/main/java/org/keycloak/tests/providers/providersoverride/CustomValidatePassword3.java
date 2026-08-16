@@ -17,15 +17,15 @@
  *
  */
 
-package org.keycloak.examples.providersoverride;
+package org.keycloak.tests.providers.providersoverride;
 
-import org.keycloak.authentication.authenticators.directgrant.ValidateOTP;
+import org.keycloak.authentication.authenticators.directgrant.ValidatePassword;
 
 /**
- * Overrides built-in, but should not be called due the different order
+ * Test for order (This one is not called due CustomValidatePassword2 has bigger order)
  *
  */
-public class CustomValidateOTP extends ValidateOTP {
+public class CustomValidatePassword3 extends ValidatePassword {
 
     @Override
     public int order() {

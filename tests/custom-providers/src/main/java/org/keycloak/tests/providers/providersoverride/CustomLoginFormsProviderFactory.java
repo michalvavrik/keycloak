@@ -17,14 +17,20 @@
  *
  */
 
-package org.keycloak.examples.providersoverride;
+package org.keycloak.tests.providers.providersoverride;
 
-import org.keycloak.authentication.authenticators.directgrant.ValidateUsername;
+import org.keycloak.forms.login.LoginFormsProvider;
+import org.keycloak.forms.login.freemarker.FreeMarkerLoginFormsProviderFactory;
+import org.keycloak.models.KeycloakSession;
 
 /**
- * This has same providerID like built-in ValidateUsername provider. But it should be called in favour of ValidateUsername even
+ * This has same providerID like built-in FreeMarkerLoginFormsProviderFactory. But it should be called in favour of it even
  * if it doesn't have "order" set. As it is custom provider and it worked this way in previous versions
- *
  */
-public class CustomValidateUsername extends ValidateUsername {
+public class CustomLoginFormsProviderFactory extends FreeMarkerLoginFormsProviderFactory {
+
+    @Override
+    public LoginFormsProvider create(KeycloakSession session) {
+        return new CustomLoginFormsProvider(session);
+    }
 }
