@@ -243,7 +243,11 @@ public abstract class AbstractKerberosTest extends AbstractAuthTest {
 
 
     protected Response spnegoLogin(String username, String password) {
-        Response response = spnegoLoginWithoutRedirect(username, password);
+        String kcLoginPageLocation = oauth.loginForm().state("spnegoLogin").build();
+
+        // Request for SPNEGO login sent with Resteasy client
+        spnegoSchemeFactory.setCredentials(username, password);
+        Response response = client.target(kcLoginPageLocation).request().get();
         if (response.getStatus() == 302) {
             if (response.getLocation() == null)
                 return response;
@@ -253,15 +257,6 @@ public abstract class AbstractKerberosTest extends AbstractAuthTest {
             }
         }
         return response;
-
-    }
-
-    protected Response spnegoLoginWithoutRedirect(String username, String password) {
-        String kcLoginPageLocation = oauth.loginForm().state("spnegoLogin").build();
-
-        // Request for SPNEGO login sent with Resteasy client
-        spnegoSchemeFactory.setCredentials(username, password);
-        return client.target(kcLoginPageLocation).request().get();
 
     }
 

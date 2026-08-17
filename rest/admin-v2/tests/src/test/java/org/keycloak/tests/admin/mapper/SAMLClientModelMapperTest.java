@@ -24,9 +24,9 @@ import org.keycloak.models.ClientModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
+import org.keycloak.models.mapper.SAMLClientModelMapper;
 import org.keycloak.representations.admin.v2.BaseClientRepresentation;
 import org.keycloak.representations.admin.v2.SAMLClientRepresentation;
-import org.keycloak.services.client.scim.SAMLClientModelSchema;
 import org.keycloak.testframework.annotations.InjectRealm;
 import org.keycloak.testframework.annotations.KeycloakIntegrationTest;
 import org.keycloak.testframework.realm.ManagedRealm;
@@ -73,8 +73,8 @@ public class SAMLClientModelMapperTest {
             clientModel.setBaseUrl("http://localhost:8080/saml");
             clientModel.setRedirectUris(Set.of("http://localhost:8080/saml/callback"));
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            BaseClientRepresentation rep = schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            BaseClientRepresentation rep = mapper.fromModel(clientModel);
 
             assertThat(rep, instanceOf(SAMLClientRepresentation.class));
             SAMLClientRepresentation samlRep = (SAMLClientRepresentation) rep;
@@ -89,6 +89,9 @@ public class SAMLClientModelMapperTest {
         }
     }
 
+    private SAMLClientModelMapper getModelMapper(KeycloakSession session) {
+        return new SAMLClientModelMapper();
+    }
 
     @TestOnServer
     public void fromModel_mapsRoles(KeycloakSession session) {
@@ -100,8 +103,8 @@ public class SAMLClientModelMapperTest {
             setupBasicSamlClientModel(clientModel);
             RoleModel clientRole = clientModel.addRole("saml-client-role");
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            BaseClientRepresentation rep = schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            BaseClientRepresentation rep = mapper.fromModel(clientModel);
 
             assertThat(rep.getRoles(), contains("saml-client-role"));
         } finally {
@@ -120,8 +123,8 @@ public class SAMLClientModelMapperTest {
             clientModel.setAttribute(SAML_NAME_ID_FORMAT, "username");
             clientModel.setAttribute(SAML_FORCE_NAME_ID_FORMAT, "true");
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            SAMLClientRepresentation rep = (SAMLClientRepresentation) schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            SAMLClientRepresentation rep = (SAMLClientRepresentation) mapper.fromModel(clientModel);
 
             assertThat(rep.getNameIdFormat(), is(SAMLClientRepresentation.NameIdFormat.USERNAME));
             assertThat(rep.getForceNameIdFormat(), is(true));
@@ -146,8 +149,8 @@ public class SAMLClientModelMapperTest {
             clientModel.setAttribute(SAML_SIGNATURE_CANONICALIZATION, "http://www.w3.org/2001/10/xml-exc-c14n#");
             clientModel.setAttribute(SAML_SIGNING_CERTIFICATE, "MIICertificate");
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            SAMLClientRepresentation rep = (SAMLClientRepresentation) schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            SAMLClientRepresentation rep = (SAMLClientRepresentation) mapper.fromModel(clientModel);
 
             assertThat(rep.getIncludeAuthnStatement(), is(true));
             assertThat(rep.getSignDocuments(), is(true));
@@ -172,8 +175,8 @@ public class SAMLClientModelMapperTest {
             clientModel.setAttribute(SAML_FORCE_POST_BINDING, "true");
             clientModel.setFrontchannelLogout(true);
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            SAMLClientRepresentation rep = (SAMLClientRepresentation) schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            SAMLClientRepresentation rep = (SAMLClientRepresentation) mapper.fromModel(clientModel);
 
             assertThat(rep.getForcePostBinding(), is(true));
             assertThat(rep.getFrontChannelLogout(), is(true));
@@ -192,8 +195,8 @@ public class SAMLClientModelMapperTest {
             setupBasicSamlClientModel(clientModel);
             clientModel.setAttribute(SAML_ALLOW_ECP_FLOW, "true");
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            SAMLClientRepresentation rep = (SAMLClientRepresentation) schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            SAMLClientRepresentation rep = (SAMLClientRepresentation) mapper.fromModel(clientModel);
 
             assertThat(rep.getAllowEcpFlow(), is(true));
         } finally {
@@ -211,8 +214,8 @@ public class SAMLClientModelMapperTest {
             setupBasicSamlClientModel(clientModel);
             // Don't set any SAML-specific attributes
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            SAMLClientRepresentation rep = (SAMLClientRepresentation) schema.fromModel(clientModel);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            SAMLClientRepresentation rep = (SAMLClientRepresentation) mapper.fromModel(clientModel);
 
             assertThat(rep.getNameIdFormat(), nullValue());
             assertThat(rep.getForceNameIdFormat(), nullValue());
@@ -242,8 +245,8 @@ public class SAMLClientModelMapperTest {
             rep.setAppUrl("http://example.com/saml");
             rep.setRedirectUris(Set.of("http://example.com/saml/callback"));
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             assertThat(clientModel.isEnabled(), is(true));
             assertThat(clientModel.getClientId(), is("new-saml-client"));
@@ -271,8 +274,8 @@ public class SAMLClientModelMapperTest {
             rep.setNameIdFormat(SAMLClientRepresentation.NameIdFormat.EMAIL);
             rep.setForceNameIdFormat(true);
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             assertThat(clientModel.getAttribute(SAML_NAME_ID_FORMAT), is("email"));
             assertThat(clientModel.getAttribute(SAML_FORCE_NAME_ID_FORMAT), is("true"));
@@ -300,8 +303,8 @@ public class SAMLClientModelMapperTest {
             rep.setSignatureCanonicalizationMethod("http://www.w3.org/2001/10/xml-exc-c14n#WithComments");
             rep.setSigningCertificate("MIINewCertificate");
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             assertThat(clientModel.getAttribute(SAML_AUTHN_STATEMENT), is("true"));
             assertThat(clientModel.getAttribute(SAML_SERVER_SIGNATURE), is("true"));
@@ -329,8 +332,8 @@ public class SAMLClientModelMapperTest {
             rep.setForcePostBinding(true);
             rep.setFrontChannelLogout(true);
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             assertThat(clientModel.getAttribute(SAML_FORCE_POST_BINDING), is("true"));
             assertThat(clientModel.isFrontchannelLogout(), is(true));
@@ -352,8 +355,8 @@ public class SAMLClientModelMapperTest {
             rep.setRedirectUris(Set.of());
             rep.setAllowEcpFlow(true);
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             assertThat(clientModel.getAttribute(SAML_ALLOW_ECP_FLOW), is("true"));
         } finally {
@@ -379,8 +382,8 @@ public class SAMLClientModelMapperTest {
             rep.setRedirectUris(Set.of());
             // Leave SAML-specific fields null (null means remove existing attribute)
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             // Existing attributes should be removed when rep values are null
             assertThat(clientModel.getAttribute(SAML_NAME_ID_FORMAT), nullValue());
@@ -411,8 +414,8 @@ public class SAMLClientModelMapperTest {
             rep.setFrontChannelLogout(false);
             rep.setAllowEcpFlow(false);
 
-            SAMLClientModelSchema schema = SAMLClientModelSchema.INSTANCE;
-            schema.populate(clientModel, rep);
+            SAMLClientModelMapper mapper = getModelMapper(session);
+            mapper.toModel(rep, clientModel);
 
             assertThat(clientModel.isEnabled(), is(false));
             assertThat(clientModel.getAttribute(SAML_FORCE_NAME_ID_FORMAT), is("false"));

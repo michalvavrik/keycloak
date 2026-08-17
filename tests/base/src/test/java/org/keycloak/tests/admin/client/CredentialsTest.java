@@ -39,7 +39,6 @@ import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.representations.KeyStoreConfig;
-import org.keycloak.representations.idm.AdminEventRepresentation;
 import org.keycloak.representations.idm.CertificateRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
@@ -63,7 +62,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -139,21 +137,11 @@ public class CredentialsTest {
     public void testGetCertificateResource() {
         ClientAttributeCertificateResource certRsc = accountClient.getCertficateResource("jwt.credential");
         CertificateRepresentation cert = certRsc.generate();
-
-        // Response should contain the private key
-        assertNotNull(cert.getPrivateKey(), "generate should return private key");
-        assertNotNull(cert.getCertificate(), "generate should return certificate");
-
-        // But server should not have stored it
         CertificateRepresentation certFromGet = certRsc.getKeyInfo();
-        assertNull(certFromGet.getPrivateKey(), "private key should not be stored on server");
-        assertEquals(cert.getCertificate(), certFromGet.getCertificate(), "certificate should match");
-        // Admin event should not contain the private key
-        AdminEventRepresentation event = adminEvents.poll();
-        assertFalse(event.getRepresentation().contains(cert.getPrivateKey()), "admin event should not contain private key");
-        CertificateRepresentation expectedEventRep = new CertificateRepresentation();
-        expectedEventRep.setCertificate(cert.getCertificate());
-        AdminEventAssertion.assertEvent(event, OperationType.ACTION, AdminEventPaths.clientCertificateGenerateSecretPath(accountClient.toRepresentation().getId(), "jwt.credential"), expectedEventRep, ResourceType.CLIENT);
+        assertEquals(cert.getCertificate(), certFromGet.getCertificate());
+        assertEquals(cert.getPrivateKey(), certFromGet.getPrivateKey());
+
+        AdminEventAssertion.assertEvent(adminEvents.poll(), OperationType.ACTION, AdminEventPaths.clientCertificateGenerateSecretPath(accountClient.toRepresentation().getId(), "jwt.credential"), cert, ResourceType.CLIENT);
     }
 
     @Test
@@ -183,11 +171,12 @@ public class CredentialsTest {
         // Returned cert is not the new state but rather what was extracted from inputs
         assertNotNull(cert, "cert not null");
         assertEquals(generatedKeystore.getCertificateInfo().getCertificate(), cert.getCertificate(), "cert properly extracted");
+        assertEquals(generatedKeystore.getCertificateInfo().getPrivateKey(), cert.getPrivateKey(), "privateKey properly extracted");
 
         // Get the certificate - to make sure cert was properly updated
         cert = certRsc.getKeyInfo();
         assertEquals(generatedKeystore.getCertificateInfo().getCertificate(), cert.getCertificate(), "cert properly set");
-        assertNull(cert.getPrivateKey(), "private key should not be stored on server");
+        assertEquals(generatedKeystore.getCertificateInfo().getPrivateKey(), cert.getPrivateKey(), "privateKey properly set");
 
         // Upload a different certificate via /upload-certificate, privateKey should be nullified
         MultipartFormDataOutput form = new MultipartFormDataOutput();
@@ -251,17 +240,20 @@ public class CredentialsTest {
         KeyStoreConfig config = new KeyStoreConfig();
         config.setFormat(preferredKeystoreType.toString());
         config.setKeyAlias("alias");
+        config.setKeyPassword("keyPass");
         config.setStorePassword("storePass");
         byte[] result = certRsc.getKeystore(config);
 
         KeyStore keyStore = CryptoIntegration.getProvider().getKeyStore(preferredKeystoreType);
         keyStore.load(new ByteArrayInputStream(result), "storePass".toCharArray());
-        assertFalse(keyStore.isKeyEntry("alias"), "private key should not be in keystore");
+        Key key = keyStore.getKey("alias", "keyPass".toCharArray());
         Certificate cert = keyStore.getCertificate("alias");
 
         assertInstanceOf(X509Certificate.class, cert, "Certificat is X509");
-
+        String keyPem = KeycloakModelUtils.getPemFromKey(key);
         String certPem = KeycloakModelUtils.getPemFromCertificate((X509Certificate) cert);
+
+        assertEquals(certrep.getPrivateKey(), keyPem, "key match");
         assertEquals(certrep.getCertificate(), certPem, "cert match");
     }
 

@@ -221,8 +221,8 @@ public class SchemaResourceTypeProvider implements ScimResourceTypeProvider<Sche
     }
 
     @Override
-    public Long count(SearchRequest searchRequest, int resourceSize) {
-        return (long) resourceSize;
+    public Long count(SearchRequest searchRequest) {
+        return getAll(null).count();
     }
 
     @Override

@@ -1,4 +1,3 @@
-account,4
 actions,1
 adapter,IGNORED
 authz,3
@@ -22,6 +21,7 @@ policy,6
 providers,4
 saml,6
 script,6
+sessionlimits,6
 theme,6
 user,4
 util,4

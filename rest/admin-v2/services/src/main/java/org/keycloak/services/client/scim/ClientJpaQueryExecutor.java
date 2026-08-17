@@ -27,9 +27,7 @@ import static org.keycloak.utils.StreamsUtil.closing;
 
 public final class ClientJpaQueryExecutor {
 
-    private static final List<?> SCHEMAS = List.of(
-            OIDCClientModelSchema.INSTANCE,
-            SAMLClientModelSchema.INSTANCE);
+    private static final ClientJpaQueryProvider QUERY_PROVIDER = new ClientJpaQueryProvider();
 
     private ClientJpaQueryExecutor() {
     }
@@ -52,14 +50,14 @@ public final class ClientJpaQueryExecutor {
                 session, AdminPermissionsSchema.CLIENTS, realm, cb, query, root));
 
         ScimJPAPredicateEvaluator evaluator = new ScimJPAPredicateEvaluator(
-                null, SCHEMAS, cb, root);
+                QUERY_PROVIDER, ClientJpaQuerySchema.SCHEMAS, cb, root);
         if (filterContext != null) {
             predicates.add(evaluator.visit(filterContext).predicate());
         }
 
         var q = query.where(predicates.toArray(Predicate[]::new));
         var orders = new ArrayList<>(sortOptions.stream().map(sortOption -> {
-            var field = OIDCClientModelSchema.INSTANCE.getAttributeByPath(sortOption.field().toQueryValue())
+            var field = ClientJpaQuerySchema.INSTANCE.getAttributeByPath(sortOption.field().toQueryValue())
                     .getModelAttributeName();
             return sortOption.isAscending() ? cb.asc(root.get(field)) : cb.desc(root.get(field));
         }).toList());
