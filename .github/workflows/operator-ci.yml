@@ -191,6 +191,21 @@ jobs:
           fi
           echo "$out" | grep -cE '^kind: Deployment$' | grep -q '^1$'
 
+      - name: helm template — ServiceAccount subject namespaces
+        run: |
+          set -euo pipefail
+          out=$(helm template kc-op operator/target/helm/kubernetes/keycloak-operator \
+            --namespace helm-ns-test)
+          # Every (Cluster)RoleBinding ServiceAccount subject must use the release
+          # namespace, not a hardcoded build-time value like "keycloak".
+          hardcoded=$(echo "$out" | awk '
+            /kind:.*ServiceAccount/{sa=1; next}
+            sa && /namespace:/{gsub(/^ +/,"",$0); if ($2 != "helm-ns-test") print NR": "$0; sa=0; next}
+            sa && /^[^ ]/{sa=0}')
+          if [ -n "$hardcoded" ]; then
+            echo "ServiceAccount subjects with wrong namespace:"; echo "$hardcoded"; exit 1
+          fi
+
       - name: helm template — resource overrides
         run: |
           set -euo pipefail
