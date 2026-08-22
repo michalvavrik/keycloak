@@ -35,6 +35,11 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>io.quarkiverse.operatorsdk</groupId>
+                <artifactId>quarkus-operator-sdk-helm</artifactId>
+                <version>${quarkus-operator-sdk.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -68,17 +73,15 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Helm chart generation -->
+        <!-- Helm chart generation – versions must stay aligned with the platform BOM -->
         <dependency>
             <groupId>io.quarkiverse.helm</groupId>
             <artifactId>quarkus-helm</artifactId>
-            <version>1.2.7</version>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>io.quarkiverse.operatorsdk</groupId>
             <artifactId>quarkus-operator-sdk-helm</artifactId>
-            <version>7.4.0</version>
             <optional>true</optional>
         </dependency>
 
