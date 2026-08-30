@@ -25,7 +25,7 @@ public class CustomJpaEntityProvider implements TestProvider {
 
     @Override
     public Class[] getClasses() {
-        return new Class[] { Realm.class };
+        return new Class[] { Realm.class, KeycloakItH2Dialect.class, UnlistedEntity.class };
     }
 
     @Override

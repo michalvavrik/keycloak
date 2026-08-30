@@ -104,12 +104,31 @@ public abstract class KeycloakLogFilter implements Filter {
             }
         }
 
+        // Suppress the Hibernate ORM "unsupported properties" WARN(s) that FastBootHibernatePersistenceProvider emits
+        // for the default persistence unit; see isDefaultPersistenceUnitUnsupportedPropertiesWarning.
+        if (isDefaultPersistenceUnitUnsupportedPropertiesWarning(record)) {
+            return false;
+        }
+
         if (executor != null && ThreadCreator.isVirtual(Thread.currentThread())) {
             executor.submit(new RecordLogger(ExtLogRecord.wrap(record), this));
             return false;
         }
 
         return true;
+    }
+
+    static boolean isDefaultPersistenceUnitUnsupportedPropertiesWarning(LogRecord record) {
+        if (!Objects.equals(record.getLevel(), Level.WARNING)
+                || !"io.quarkus.hibernate.orm.runtime.FastBootHibernatePersistenceProvider".equals(record.getLoggerName())) {
+            return false;
+        }
+        String message = record.getMessage();
+        if (message == null || !message.startsWith("Persistence-unit [") || !message.contains("unsupported properties")) {
+            return false;
+        }
+        Object[] parameters = record.getParameters();
+        return parameters != null && parameters.length > 0 && "<default>".equals(String.valueOf(parameters[0]));
     }
 
     private Handler getHandler() {
