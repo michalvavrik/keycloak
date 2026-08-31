@@ -87,6 +87,10 @@ public class CustomJpaEntityProviderDistTest {
         cliResult.assertMessageWasShownExactlyNumberOfTimes("hibernate.dialect: com.acme.provider.legacy.jpa.entity.KeycloakItH2Dialect", 1);
         cliResult.assertMessageWasShownExactlyNumberOfTimes("hibernate.dialect: org.hibernate.dialect.H2Dialect", 1);
 
+        cliResult.assertMessageWasShownExactlyNumberOfTimes("jakarta.persistence.sharedCache.mode: ENABLE_SELECTIVE", 1);
+        cliResult.assertMessageWasShownExactlyNumberOfTimes("jakarta.persistence.validation.mode: NONE", 1);
+        cliResult.assertMessage("Persistence unit 'client-store' declares <jar-file> ([file:lib/does-not-exist.jar]), which is not supported; entities from a referenced jar are not added to this unit. List them with <class> or package them in the unit's own jar.");
+
         cliResult.assertStartedDevMode();
     }
 }

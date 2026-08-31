@@ -41,6 +41,8 @@ import java.util.logging.Handler;
 
 import jakarta.inject.Singleton;
 import jakarta.persistence.PersistenceUnitTransactionType;
+import jakarta.persistence.SharedCacheMode;
+import jakarta.persistence.ValidationMode;
 
 import org.keycloak.Config;
 import org.keycloak.authentication.AuthenticatorSpi;
@@ -520,6 +522,10 @@ class KeycloakProcessor {
                 throw new IllegalArgumentException("You need to use '%s' transaction type in your persistence.xml file."
                         .formatted(PersistenceUnitTransactionType.JTA.name()));
             }
+            if (descriptor.getJarFileUrls() != null && !descriptor.getJarFileUrls().isEmpty()) {
+                logger.warnf("Persistence unit '%s' declares <jar-file> (%s), which is not supported; entities from a referenced jar are not added to this unit."
+                        + " List them with <class> or package them in the unit's own jar.", puName, descriptor.getJarFileUrls());
+            }
 
             String datasourceName = getDatasourceNameFromPersistenceXml(descriptor);
             AdditionalPersistenceUnitBuildItem.Builder builder = AdditionalPersistenceUnitBuildItem.builder(puName)
@@ -546,6 +552,14 @@ class KeycloakProcessor {
                     }
                     builder.property(key, value);
                 }
+            }
+            ValidationMode validationMode = descriptor.getValidationMode();
+            if (validationMode != null && validationMode != ValidationMode.AUTO) {
+                builder.property("jakarta.persistence.validation.mode", validationMode.name());
+            }
+            SharedCacheMode sharedCacheMode = descriptor.getSharedCacheMode();
+            if (sharedCacheMode != null && sharedCacheMode != SharedCacheMode.UNSPECIFIED) {
+                builder.property("jakarta.persistence.sharedCache.mode", sharedCacheMode.name());
             }
             producer.produce(builder.build());
         }
