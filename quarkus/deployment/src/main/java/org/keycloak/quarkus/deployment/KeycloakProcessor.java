@@ -116,6 +116,7 @@ import org.keycloak.theme.FolderThemeProviderFactory;
 import org.keycloak.theme.JarThemeProviderFactory;
 import org.keycloak.theme.ThemeResourceSpi;
 import org.keycloak.transaction.JBossJtaTransactionManagerLookup;
+import org.keycloak.truststore.SystemTruststoreReload;
 import org.keycloak.userprofile.config.UPConfigUtils;
 import org.keycloak.util.JsonSerialization;
 import org.keycloak.utils.StringUtil;
@@ -127,6 +128,7 @@ import io.quarkus.agroal.runtime.TransactionIntegration;
 import io.quarkus.agroal.runtime.health.DataSourceHealthCheck;
 import io.quarkus.agroal.spi.JdbcDataSourceBuildItem;
 import io.quarkus.agroal.spi.JdbcDriverBuildItem;
+import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
 import io.quarkus.arc.deployment.BuildTimeConditionBuildItem;
 import io.quarkus.arc.deployment.SyntheticBeanBuildItem;
@@ -196,6 +198,8 @@ import static org.keycloak.representations.provider.ScriptProviderDescriptor.POL
 import static org.keycloak.representations.provider.ScriptProviderDescriptor.SAML_MAPPERS;
 import static org.keycloak.theme.ClasspathThemeProviderFactory.KEYCLOAK_THEMES_JSON;
 
+import static io.quarkus.arc.processor.DotNames.SINGLETON;
+
 class KeycloakProcessor {
 
     private static final Logger logger = Logger.getLogger(KeycloakProcessor.class);
@@ -237,6 +241,12 @@ class KeycloakProcessor {
 
     private static ProviderFactory registerSAMLScriptMapper(ScriptProviderMetadata metadata) {
         return new DeployedScriptSAMLProtocolMapper(metadata);
+    }
+
+    @BuildStep
+    AdditionalBeanBuildItem registerSystemTruststoreReloadAsCdiBean() {
+        return AdditionalBeanBuildItem.builder().addBeanClass(SystemTruststoreReload.class).setUnremovable()
+                .setDefaultScope(SINGLETON).build();
     }
 
     @BuildStep
