@@ -24,7 +24,7 @@ public class TruststorePropertyMappers implements PropertyMapperGrouping {
                         .build(),
                 fromOption(TruststoreOptions.TRUSTSTORE_PATHS_RELOAD_PERIOD)
                         .paramLabel("reload period")
-                        .to("quarkus.tls.\"" + SystemTruststoreReload.TLS_BUCKET_PREFIX + "\".reload-period")
+                        .to("quarkus.tls.\"" + SystemTruststoreReload.TLS_BUCKET_NAME + "\".reload-period")
                         .build()
         );
     }
