@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.net.ssl.SSLSocketFactory;
 import javax.security.auth.x500.X500Principal;
 
 import org.keycloak.Config;
@@ -54,13 +55,14 @@ import org.jboss.logging.Logger;
 /**
  * @author <a href="mailto:mstrukel@redhat.com">Marko Strukelj</a>
  */
-public class FileTruststoreProviderFactory implements TruststoreProviderFactory {
+public class FileTruststoreProviderFactory implements TruststoreProviderFactory, TruststoreReloadListener {
 
     static final String HOSTNAME_VERIFICATION_POLICY = "hostname-verification-policy";
 
     private static final Logger log = Logger.getLogger(FileTruststoreProviderFactory.class);
 
-    private TruststoreProvider provider;
+    private final ReloadableTruststoreProvider provider = new ReloadableTruststoreProvider();
+    private volatile Config.Scope config;
 
     @Override
     public TruststoreProvider create(KeycloakSession session) {
@@ -69,11 +71,19 @@ public class FileTruststoreProviderFactory implements TruststoreProviderFactory 
 
     // For testing purposes
     public void setProvider(TruststoreProvider provider) {
-        this.provider = provider;
+        this.provider.delegate = provider;
+    }
+
+    @Override
+    public void truststoreReloaded(KeycloakSession session) {
+        if (config != null) {
+            init(config);
+        }
     }
 
     @Override
     public void init(Config.Scope config) {
+        this.config = config;
 
         String storepath = config.get("file");
         String pass = config.get("password");
@@ -151,13 +161,16 @@ public class FileTruststoreProviderFactory implements TruststoreProviderFactory 
         }
 
         TruststoreCertificatesLoader certsLoader = new TruststoreCertificatesLoader(truststore);
-        provider = new FileTruststoreProvider(truststore, verificationPolicy, Collections.unmodifiableMap(certsLoader.trustedRootCerts),
+        provider.delegate = new FileTruststoreProvider(truststore, verificationPolicy,
+                Collections.unmodifiableMap(certsLoader.trustedRootCerts),
                 Collections.unmodifiableMap(certsLoader.intermediateCerts),
                 httpsTruststore,
                 httpsCertsLoader != null ? Collections.unmodifiableMap(httpsCertsLoader.trustedRootCerts) : null,
                 httpsCertsLoader != null ? Collections.unmodifiableMap(httpsCertsLoader.intermediateCerts) : null
         );
-        TruststoreProviderSingleton.set(provider);
+        if (TruststoreProviderSingleton.get() != provider) {
+            TruststoreProviderSingleton.set(provider);
+        }
         log.debugf("File truststore provider initialized: %s, Truststore type: %s",  new File(storepath).getAbsolutePath(), type);
     }
 
@@ -285,6 +298,58 @@ public class FileTruststoreProviderFactory implements TruststoreProviderFactory 
                 log.trace("certificate " + cert.getSubjectDN() + " detected as intermediate CA");
             }
             return false;
+        }
+    }
+
+    private static final class ReloadableTruststoreProvider implements TruststoreProvider {
+
+        private volatile TruststoreProvider delegate;
+
+        @Override
+        public HostnameVerificationPolicy getPolicy() {
+            return delegate.getPolicy();
+        }
+
+        @Override
+        public SSLSocketFactory getSSLSocketFactory() {
+            return delegate.getSSLSocketFactory();
+        }
+
+        @Override
+        public KeyStore getTruststore() {
+            return delegate.getTruststore();
+        }
+
+        @Override
+        public Map<X500Principal, List<X509Certificate>> getRootCertificates() {
+            return delegate.getRootCertificates();
+        }
+
+        @Override
+        public Map<X500Principal, List<X509Certificate>> getIntermediateCertificates() {
+            return delegate.getIntermediateCertificates();
+        }
+
+        @Override
+        public KeyStore getHttpsTruststore() {
+            return delegate.getHttpsTruststore();
+        }
+
+        @Override
+        public Map<X500Principal, List<X509Certificate>> getHttpsRootCertificates() {
+            return delegate.getHttpsRootCertificates();
+        }
+
+        @Override
+        public Map<X500Principal, List<X509Certificate>> getHttpsIntermediateCertificates() {
+            return delegate.getHttpsIntermediateCertificates();
+        }
+
+        @Override
+        public void close() {
+            if (delegate != null) {
+                delegate.close();
+            }
         }
     }
 }
