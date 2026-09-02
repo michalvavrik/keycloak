@@ -4,12 +4,13 @@ import java.util.Collection;
 
 import jakarta.enterprise.event.Observes;
 
-import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.quarkus.runtime.integration.QuarkusKeycloakSessionFactory;
 import org.keycloak.truststore.SystemTruststoreReload;
 import org.keycloak.truststore.TruststoreReloadListener;
 
 import io.quarkus.tls.CertificateUpdatedEvent;
+
+import static org.keycloak.models.utils.KeycloakModelUtils.runJobInTransaction;
 
 class SystemTruststoreReloadObserver {
 
@@ -18,7 +19,7 @@ class SystemTruststoreReloadObserver {
         if (!SystemTruststoreReload.TLS_BUCKET_NAME.equalsIgnoreCase(event.name())) {
             return;
         }
-        if (!systemTruststoreReload.hasPendingConsumerNotification()) {
+        if (!systemTruststoreReload.hasPendingLegacyNotification()) {
             // The provider's getTrustStore already re-merged (or detected no change) for this reload period,
             // so there is nothing new to propagate. Skip early to avoid opening a transaction on no-op periods.
             return;
@@ -31,6 +32,8 @@ class SystemTruststoreReloadObserver {
                     }
                 })
                 .toList();
-        KeycloakModelUtils.runJobInTransaction(sessionFactory, session -> systemTruststoreReload.notifyConsumers(listeners, session));
+        if (!listeners.isEmpty()) {
+            runJobInTransaction(sessionFactory, session -> systemTruststoreReload.notifyConsumers(listeners, session));
+        }
     }
 }

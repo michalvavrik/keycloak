@@ -38,7 +38,8 @@ import org.junit.platform.suite.api.Suite;
         KcAdmTest.class,
         KcAdmCreateTest.class,
         KcRegTest.class,
-        KcRegCreateTest.class
+        KcRegCreateTest.class,
+        TruststoreReloadTest.class
 })
 public class FipsNonStrictTestSuite {
 
