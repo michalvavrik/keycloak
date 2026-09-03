@@ -67,6 +67,7 @@ import org.keycloak.config.MetricsOptions;
 import org.keycloak.config.SecurityOptions;
 import org.keycloak.config.TracingOptions;
 import org.keycloak.config.TransactionOptions;
+import org.keycloak.config.TruststoreOptions;
 import org.keycloak.config.database.Database;
 import org.keycloak.connections.jpa.DefaultJpaConnectionProviderFactory;
 import org.keycloak.connections.jpa.JpaConnectionProvider;
@@ -198,7 +199,8 @@ import static org.keycloak.representations.provider.ScriptProviderDescriptor.POL
 import static org.keycloak.representations.provider.ScriptProviderDescriptor.SAML_MAPPERS;
 import static org.keycloak.theme.ClasspathThemeProviderFactory.KEYCLOAK_THEMES_JSON;
 
-import static io.quarkus.arc.processor.DotNames.SINGLETON;
+import static io.quarkus.arc.processor.DotNames.APPLICATION_SCOPED;
+
 
 class KeycloakProcessor {
 
@@ -243,10 +245,13 @@ class KeycloakProcessor {
         return new DeployedScriptSAMLProtocolMapper(metadata);
     }
 
+    @Consume(ConfigBuildItem.class)
     @BuildStep
-    AdditionalBeanBuildItem registerSystemTruststoreReloadAsCdiBean() {
-        return AdditionalBeanBuildItem.builder().addBeanClass(SystemTruststoreReload.class).setUnremovable()
-                .setDefaultScope(SINGLETON).build();
+    void registerSystemTruststoreReloadAsCdiBean(BuildProducer<AdditionalBeanBuildItem> additionalBeanProducer) {
+        if (Configuration.getOptionalKcValue(TruststoreOptions.TRUSTSTORE_PATHS_RELOAD_PERIOD).isPresent()) {
+            additionalBeanProducer.produce(AdditionalBeanBuildItem.builder().setUnremovable().setDefaultScope(APPLICATION_SCOPED)
+                    .addBeanClass(SystemTruststoreReload.class).build());
+        }
     }
 
     @BuildStep

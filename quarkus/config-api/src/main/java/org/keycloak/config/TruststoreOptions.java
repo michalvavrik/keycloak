@@ -26,7 +26,10 @@ public class TruststoreOptions {
             .deprecatedValues("STRICT and WILDCARD have been deprecated, use DEFAULT instead.", HostnameVerificationPolicy.STRICT, HostnameVerificationPolicy.WILDCARD)
             .build();
 
-    public static final Option<String> TRUSTSTORE_PATHS_RELOAD_PERIOD = new OptionBuilder<>("truststore-paths-reload-period", String.class)
+    public static final String TRUSTSTORE_PATHS_RELOAD_PERIOD_KEY = "truststore-paths-reload-period";
+
+    public static final Option<String> TRUSTSTORE_PATHS_RELOAD_PERIOD = new OptionBuilder<>(TRUSTSTORE_PATHS_RELOAD_PERIOD_KEY, String.class)
+            .buildTime(true)
             .category(OptionCategory.TRUSTSTORE)
             .description("Interval on which to reload the system truststore material referenced by the truststore-paths option and the automatically discovered CA certificates. " + DURATION_DESCRIPTION + " If not set, the system truststore is not reloaded automatically.")
             .build();

@@ -11,7 +11,7 @@ import org.keycloak.services.x509.X509ClientCertificateLookup;
 
 import org.jboss.logging.Logger;
 
-public final class SystemTruststoreReload {
+public class SystemTruststoreReload {
 
     public static final String TLS_BUCKET_NAME = "keycloak-system-truststore";
 
@@ -23,7 +23,7 @@ public final class SystemTruststoreReload {
 
     private final AtomicLong NOTIFIED_COUNT = new AtomicLong();
 
-    private SystemTruststoreReload() {
+    SystemTruststoreReload() {
     }
 
     // Number of times a reload actually re-merged the truststore (skipped no-op intervals are not counted).

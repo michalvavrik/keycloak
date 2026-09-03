@@ -5,11 +5,11 @@ import java.security.KeyStore;
 import javax.net.ssl.TrustManagerFactory;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 import org.keycloak.truststore.SystemTruststoreReload;
 import org.keycloak.truststore.TruststoreBuilder;
 
+import io.quarkus.arc.properties.IfBuildProperty;
 import io.quarkus.tls.TrustStoreAndTrustOptions;
 import io.quarkus.tls.TrustStoreProvider;
 import io.smallrye.common.annotation.Identifier;
@@ -17,14 +17,23 @@ import io.vertx.core.Vertx;
 import io.vertx.core.net.TrustOptions;
 import org.jboss.logging.Logger;
 
-@ApplicationScoped
+import static org.keycloak.config.TruststoreOptions.TRUSTSTORE_PATHS_RELOAD_PERIOD_KEY;
+import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
+
+import static io.quarkus.arc.properties.StringValueMatch.REGEX;
+
+@IfBuildProperty(name = NS_KEYCLOAK_PREFIX + TRUSTSTORE_PATHS_RELOAD_PERIOD_KEY, stringValue = ".*\\S.*", match = REGEX)
 @Identifier(SystemTruststoreReload.TLS_BUCKET_NAME)
-public class SystemTruststoreProvider implements TrustStoreProvider {
+@ApplicationScoped
+class SystemTruststoreProvider implements TrustStoreProvider {
 
     private static final Logger LOGGER = Logger.getLogger(SystemTruststoreProvider.class);
 
-    @Inject
-    SystemTruststoreReload systemTruststoreReload;
+    private final SystemTruststoreReload systemTruststoreReload;
+
+    SystemTruststoreProvider(SystemTruststoreReload systemTruststoreReload) {
+        this.systemTruststoreReload = systemTruststoreReload;
+    }
 
     @Override
     public TrustStoreAndTrustOptions getTrustStore(Vertx vertx) {
