@@ -69,6 +69,13 @@ public class CustomJpaEntityProviderDistTest {
     }
 
     @Test
+    @Launch({"start-dev", "--db=dev-file", "--log-level=org.hibernate.orm.jpa:debug", "--db-kind-new-user-store=dev-mem", "--db-kind-client-store=dev-file", "--db-kind-pu-without-dialect-store=dev-mem"})
+    void implicitOrmXmlMappingApplied(CLIResult cliResult) {
+        cliResult.assertMessage("com.acme.provider.legacy.jpa.entity.OrmMappedEntity");
+        cliResult.assertStartedDevMode();
+    }
+
+    @Test
     @Launch({"start-dev", "--db=dev-file", "--log-level=org.hibernate.orm.jpa:debug,org.keycloak.quarkus.deployment.KeycloakProcessor:debug", "--db-kind-new-user-store=dev-mem", "--db-kind-client-store=dev-file", "--db-kind-pu-without-dialect-store=dev-mem"})
     void testUserManagedEntityNotAddedToDefaultPU(CLIResult cliResult) {
         cliResult.assertMessage(MULTIPLE_DATASOURCES_MSG);

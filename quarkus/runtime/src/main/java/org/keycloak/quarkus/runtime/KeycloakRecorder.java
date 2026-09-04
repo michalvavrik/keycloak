@@ -267,18 +267,19 @@ public class KeycloakRecorder {
             if (schemaAction != null) {
                 propertyCollector.accept(AvailableSettings.JAKARTA_HBM2DDL_DATABASE_ACTION, schemaAction);
             }
-            reapply(originalProps, propertyCollector, AvailableSettings.JAKARTA_HBM2DDL_CREATE_SCHEMAS);
+            reapply(originalProps, propertyCollector, AvailableSettings.JAKARTA_HBM2DDL_CREATE_SCHEMAS, "javax.persistence.create-database-schemas");
             reapply(originalProps, propertyCollector, HibernateHints.HINT_FLUSH_MODE);
-            String scriptsAction = originalProps.getOrDefault(AvailableSettings.JAKARTA_HBM2DDL_SCRIPTS_ACTION,
-                    originalProps.get("javax.persistence.schema-generation.scripts.action"));
-            if (scriptsAction != null) {
-                propertyCollector.accept(AvailableSettings.JAKARTA_HBM2DDL_SCRIPTS_ACTION, scriptsAction);
-            }
+            reapply(originalProps, propertyCollector, AvailableSettings.JAKARTA_HBM2DDL_SCRIPTS_ACTION, "javax.persistence.schema-generation.scripts.action");
         };
     }
 
-    private static void reapply(Map<String, String> originalProps, BiConsumer<String, Object> propertyCollector, String key) {
+    private static void reapply(Map<String, String> originalProps, BiConsumer<String, Object> propertyCollector, String key, String... legacyKeys) {
         String value = originalProps.get(key);
+        for (String legacyKey : legacyKeys) {
+            if (value == null) {
+                value = originalProps.get(legacyKey);
+            }
+        }
         if (value != null) {
             propertyCollector.accept(key, value);
         }

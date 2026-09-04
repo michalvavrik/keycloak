@@ -87,6 +87,13 @@ public class KeycloakRecorderTest {
                         .get("jakarta.persistence.schema-generation.scripts.action"));
     }
 
+    @Test
+    public void reappliesLegacyJavaxCreateSchemas() {
+        assertEquals("true",
+                reappliedRuntimeProperties(Map.of("javax.persistence.create-database-schemas", "true"))
+                        .get("jakarta.persistence.create-database-schemas"));
+    }
+
     private static Action resolvedJpaAction(String persistenceXmlKey, String persistenceXmlValue) {
         Object action = reappliedRuntimeProperties(Map.of(persistenceXmlKey, persistenceXmlValue))
                 .get(JAKARTA_HBM2DDL_DATABASE_ACTION);
