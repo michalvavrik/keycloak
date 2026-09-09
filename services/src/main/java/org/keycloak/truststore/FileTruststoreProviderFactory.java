@@ -75,6 +75,11 @@ public class FileTruststoreProviderFactory implements TruststoreProviderFactory,
     }
 
     // For testing purposes
+    public TruststoreProvider getDelegate() {
+        return this.provider.delegate;
+    }
+
+    // For testing purposes
     public void setProvider(TruststoreProvider provider) {
         this.provider.delegate = provider;
     }
