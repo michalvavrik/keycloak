@@ -45,8 +45,9 @@ public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnecti
         var dsInstance = Arc.requireContainer().select(AgroalDataSource.class, new DataSource.DataSourceLiteral(dsName));
         if (dsInstance.isResolvable() && !dsInstance.getHandle().getBean().isActive()) {
             if (!isExplicitlyDisabled(dsName)) {
+                String dbKindOption = io.quarkus.datasource.common.runtime.DataSourceUtil.isDefault(dsName) ? "db-kind" : "db-kind-" + dsName;
                 logger.warnf("Datasource '%s' is not active, so the '%s' persistence unit is skipped."
-                        + " If it should be active, configure it using datasource options like 'db-kind-%s'.", dsName, unitName, dsName);
+                        + " If it should be active, configure it using datasource options like '%s'.", dsName, unitName, dbKindOption);
             }
             return;
         }
@@ -54,7 +55,10 @@ public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnecti
     }
 
     private static boolean isExplicitlyDisabled(String dsName) {
-        return "false".equalsIgnoreCase(Configuration.getConfigValue("quarkus.datasource.\"" + dsName + "\".active").getValue());
+        String configKey = io.quarkus.datasource.common.runtime.DataSourceUtil.isDefault(dsName) 
+                ? "quarkus.datasource.active" 
+                : "quarkus.datasource.\"" + dsName + "\".active";
+        return "false".equalsIgnoreCase(Configuration.getConfigValue(configKey).getValue());
     }
 
     @Override
