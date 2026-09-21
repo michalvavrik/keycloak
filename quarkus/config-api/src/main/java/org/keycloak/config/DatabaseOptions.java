@@ -174,6 +174,12 @@ public class DatabaseOptions {
             .buildTime(true)
             .build();
 
+    public static final Option<String> DB_JPA_PACKAGES = new OptionBuilder<>("db-jpa-packages-<datasource>", String.class)
+            .category(OptionCategory.DATABASE_DATASOURCES)
+            .description("A comma-separated list of JPA packages containing entities that belong to this datasource and its corresponding persistence unit.")
+            .buildTime(true)
+            .build();
+
     public static class Datasources {
 
         /**

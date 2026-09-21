@@ -81,8 +81,8 @@ public final class PropertyMappers {
         // See https://github.com/quarkusio/quarkus/pull/42157
         if (augmenting && isKeycloakRuntime(name, mapper)
                 && (NestedPropertyMappingInterceptor.getResolvingRoot().or(() -> Optional.of(name))
-                        .filter(n -> n.startsWith("quarkus.log.") || n.startsWith("quarkus.console.")).isEmpty()
-                        || !Expressions.isEnabled())) {
+                        .filter(n -> n.startsWith("quarkus.log.") || n.startsWith("quarkus.console.") || isRuntimeMapProperty(n))
+                .isEmpty() || !Expressions.isEnabled())) {
             return ConfigValue.builder().withName(name).build();
         }
 
@@ -90,6 +90,12 @@ public final class PropertyMappers {
             return context.proceed(name);
         }
         return mapper.forKey(name).getConfigValue(name, context);
+    }
+
+    public static boolean isRuntimeMapProperty(String name) {
+        // this property is Map<String, String>, if we there are such a property name that belongs to the map
+        // SmallRye Config expects the value
+        return name.startsWith("quarkus.hibernate-orm.") && name.contains("unsupported-properties");
     }
 
     public static boolean isSpiBuildTimeProperty(String name) {

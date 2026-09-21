@@ -41,8 +41,10 @@ import java.util.function.Function;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.logging.Handler;
+import java.util.stream.Collectors;
 
 import jakarta.inject.Singleton;
+import jakarta.persistence.Entity;
 import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.persistence.SharedCacheMode;
 import jakarta.persistence.ValidationMode;
@@ -145,9 +147,12 @@ import io.quarkus.deployment.builditem.HotDeploymentWatchedFileBuildItem;
 import io.quarkus.deployment.builditem.IndexDependencyBuildItem;
 import io.quarkus.deployment.builditem.LogHandlerBuildItem;
 import io.quarkus.deployment.builditem.StaticInitConfigBuilderBuildItem;
+import io.quarkus.hibernate.orm.deployment.HibernateOrmConfig;
+import io.quarkus.hibernate.orm.deployment.HibernateOrmConfigPersistenceUnit;
 import io.quarkus.hibernate.orm.deployment.JpaModelPersistenceUnitContributionBuildItem;
 import io.quarkus.hibernate.orm.deployment.integration.HibernateOrmIntegrationRuntimeConfiguredBuildItem;
 import io.quarkus.hibernate.orm.deployment.integration.HibernateOrmIntegrationStaticConfiguredBuildItem;
+import io.quarkus.hibernate.orm.deployment.spi.AdditionalJpaModelBuildItem;
 import io.quarkus.hibernate.orm.deployment.spi.AdditionalPersistenceUnitBuildItem;
 import io.quarkus.hibernate.orm.deployment.xml.QuarkusMappingFileParser;
 import io.quarkus.hibernate.orm.runtime.PersistenceUnitUtil;
@@ -177,9 +182,12 @@ import org.hibernate.cfg.JdbcSettings;
 import org.hibernate.jpa.boot.spi.PersistenceUnitDescriptor;
 import org.hibernate.jpa.boot.spi.PersistenceXmlParser;
 import org.infinispan.protostream.SerializationContextInitializer;
+import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.AnnotationTarget;
 import org.jboss.jandex.AnnotationTransformation;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
+import org.jboss.jandex.IndexView;
 import org.jboss.jandex.MethodInfo;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.server.model.HandlerChainCustomizer;
@@ -681,7 +689,8 @@ class KeycloakProcessor {
     }
 
     @BuildStep
-    void contributeStandaloneMappingFilesToDefaultPU(BuildProducer<JpaModelPersistenceUnitContributionBuildItem> producer) {
+    void contributeStandaloneMappingFilesToDefaultPU(BuildProducer<JpaModelPersistenceUnitContributionBuildItem> xmlProducer,
+                                                     BuildProducer<AdditionalJpaModelBuildItem> modelProducer) {
         try {
             PersistenceXmlParser parser = PersistenceXmlParser.create();
             List<URL> persistenceUrls = parser.getClassLoaderService().locateResources("META-INF/persistence.xml");
@@ -691,16 +700,104 @@ class KeycloakProcessor {
             }
 
             List<URL> ormXmlUrls = parser.getClassLoaderService().locateResources("META-INF/orm.xml");
-            for (URL ormUrl : ormXmlUrls) {
-                URL jarUrl = ArchiveHelper.getJarURLFromURLEntry(ormUrl, "META-INF/orm.xml");
-                if (jarUrl != null && !persistenceRootUrls.contains(jarUrl)) {
-                    logger.debugf("Found standalone orm.xml at %s. Contributing to default persistence unit.", ormUrl);
-                    producer.produce(new JpaModelPersistenceUnitContributionBuildItem(
-                            QUARKUS_DEFAULT_PERSISTENCE_UNIT, jarUrl, Collections.emptySet(), Set.of("META-INF/orm.xml")));
+            try (QuarkusMappingFileParser mappingParser = QuarkusMappingFileParser.create()) {
+                for (URL ormUrl : ormXmlUrls) {
+                    URL jarUrl = ArchiveHelper.getJarURLFromURLEntry(ormUrl, "META-INF/orm.xml");
+                    if (jarUrl != null && !persistenceRootUrls.contains(jarUrl)) {
+                        logger.debugf("Found standalone orm.xml at %s. Contributing to default persistence unit.", ormUrl);
+                        xmlProducer.produce(new JpaModelPersistenceUnitContributionBuildItem(
+                                QUARKUS_DEFAULT_PERSISTENCE_UNIT, jarUrl, Collections.emptySet(), Set.of("META-INF/orm.xml")));
+
+                        contributeXmlMappedModels(mappingParser, jarUrl, ormUrl, modelProducer);
+                    }
                 }
             }
         } catch (Exception e) {
             logger.warn("Failed to scan for standalone orm.xml files", e);
+        }
+    }
+
+    private static void contributeXmlMappedModels(QuarkusMappingFileParser mappingParser, URL jarUrl, URL ormUrl,
+                                                  BuildProducer<AdditionalJpaModelBuildItem> modelProducer) {
+        try {
+            Optional<RecordableXmlMapping> mappingOptional = mappingParser.parse(QUARKUS_DEFAULT_PERSISTENCE_UNIT, jarUrl, "META-INF/orm.xml");
+            if (mappingOptional.isPresent() && mappingOptional.get().getOrmXmlRoot() != null) {
+                JaxbEntityMappingsImpl ormRoot = mappingOptional.get().getOrmXmlRoot();
+                String packagePrefix = ormRoot.getPackage() == null ? "" : ormRoot.getPackage() + ".";
+                if (ormRoot.getEntities() != null) {
+                    for (JaxbEntity entity : ormRoot.getEntities()) {
+                        String className = qualifyClassName(packagePrefix, entity.getClazz());
+                        if (className != null) {
+                            modelProducer.produce(new AdditionalJpaModelBuildItem(className, Set.of(QUARKUS_DEFAULT_PERSISTENCE_UNIT)));
+                        }
+                    }
+                }
+                if (ormRoot.getMappedSuperclasses() != null) {
+                    for (JaxbMappedSuperclass mappedSuperclass : ormRoot.getMappedSuperclasses()) {
+                        String className = qualifyClassName(packagePrefix, mappedSuperclass.getClazz());
+                        if (className != null) {
+                            modelProducer.produce(new AdditionalJpaModelBuildItem(className, Set.of(QUARKUS_DEFAULT_PERSISTENCE_UNIT)));
+                        }
+                    }
+                }
+                if (ormRoot.getEmbeddables() != null) {
+                    for (JaxbEmbeddable embeddable : ormRoot.getEmbeddables()) {
+                        String className = qualifyClassName(packagePrefix, embeddable.getClazz());
+                        if (className != null) {
+                            modelProducer.produce(new AdditionalJpaModelBuildItem(className, Set.of(QUARKUS_DEFAULT_PERSISTENCE_UNIT)));
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warnf("Failed to parse classes from standalone orm.xml at %s", ormUrl, e);
+        }
+    }
+
+    @BuildStep
+    void assignUnmappedEntitiesToDefaultPU(CombinedIndexBuildItem indexBuildItem,
+                                           HibernateOrmConfig hibernateOrmConfig,
+                                           List<AdditionalPersistenceUnitBuildItem> additionalPUs,
+                                           BuildProducer<AdditionalJpaModelBuildItem> producer) {
+        IndexView index = indexBuildItem.getIndex();
+
+        Set<String> namedPuClasses = new HashSet<>();
+        for (AdditionalPersistenceUnitBuildItem pu : additionalPUs) {
+            namedPuClasses.addAll(pu.getManagedClassNames());
+        }
+
+        Set<String> packageRules = hibernateOrmConfig.persistenceUnits().values().stream()
+                .map(HibernateOrmConfigPersistenceUnit::packages)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .flatMap(Set::stream)
+                .map(pkg -> pkg + ".")
+                .collect(Collectors.toUnmodifiableSet());
+
+        Set<String> assignedInterfaces = new HashSet<>();
+        for (AnnotationInstance annotation : index.getAnnotations(Entity.class)) {
+            if (annotation.target().kind() == AnnotationTarget.Kind.CLASS) {
+                ClassInfo entityClass = annotation.target().asClass();
+                String className = entityClass.name().toString();
+                if (!namedPuClasses.contains(className)) {
+                    if (packageRules.stream().noneMatch(className::startsWith)) {
+                        producer.produce(new AdditionalJpaModelBuildItem(className, Set.of(QUARKUS_DEFAULT_PERSISTENCE_UNIT)));
+                    }
+
+                    // this avoids warnings that interface like OrganizationInvitationModel does not belong to any
+                    // persistence unit, because org.keycloak.models is not a package of the default persistence unit;
+                    // we have a test which will fail if this code is not covering some case
+                    for (DotName ifaceDotName : entityClass.interfaceNames()) {
+                        String ifaceName = ifaceDotName.toString();
+                        if (!namedPuClasses.contains(ifaceName) && ifaceName.startsWith("org.keycloak.models.")
+                                && assignedInterfaces.add(ifaceName)) {
+                            if (packageRules.stream().noneMatch(ifaceName::startsWith)) {
+                                producer.produce(new AdditionalJpaModelBuildItem(ifaceName, Set.of(QUARKUS_DEFAULT_PERSISTENCE_UNIT)));
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

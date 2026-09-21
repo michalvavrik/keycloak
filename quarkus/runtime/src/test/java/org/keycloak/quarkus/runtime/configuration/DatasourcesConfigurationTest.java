@@ -863,4 +863,26 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
         assertConfig("db-dialect-user-store", MariaDBDialect.class.getName());
         assertExternalConfig("quarkus.hibernate-orm.dialect", PostgreSQLDialect.class.getName());
     }
+
+    @Test
+    public void namedPuHibernatePropertiesIgnoredWithoutPackages() {
+        ConfigArgsConfigSource.setCliArgs("--db-kind-my-store=dev-mem", "--db-debug-jpql-my-store=true", "--db-log-slow-queries-threshold-my-store=5000");
+        initConfig();
+
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\"");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms");
+    }
+
+    @Test
+    public void namedPuHibernatePropertiesMappedWhenPackagesPresent() {
+        try {
+            ConfigArgsConfigSource.setCliArgs("--db-kind-my-store=dev-mem", "--db-debug-jpql-my-store=true", "--db-log-slow-queries-threshold-my-store=5000", "--db-jpa-packages-my-store=org.example.entities");
+            initConfig();
+
+            assertExternalConfig("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\"", "true");
+            assertExternalConfig("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", "5000");
+        } finally {
+            System.clearProperty("quarkus.hibernate-orm.\"my-store\".packages");
+        }
+    }
 }

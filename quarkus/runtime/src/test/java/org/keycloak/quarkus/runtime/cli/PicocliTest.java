@@ -2151,6 +2151,17 @@ Environment.setHomeDir(tmp);
     }
     
     @Test
+    public void failMismatchedDatasourceName() {
+        System.setProperty("quarkus.hibernate-orm.\"my-store\".datasource", "wrong-store");
+        try {
+            NonRunningPicocli nonRunningPicocli = pseudoLaunch("build", "--db-kind-my-store=dev-mem");
+            assertError(nonRunningPicocli, "The persistence unit name 'my-store' must match its datasource name");
+        } finally {
+            System.clearProperty("quarkus.hibernate-orm.\"my-store\".datasource");
+        }
+    }
+
+    @Test
     public void commandSuggestions() {
         NonRunningPicocli nonRunningPicocli = new NonRunningPicocli() {
             @Override

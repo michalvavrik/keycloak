@@ -203,8 +203,14 @@ public class PropertyMappingInterceptor implements ConfigSourceInterceptor {
 
     private boolean hasValue(String key, ConfigSourceInterceptorContext context) {
         try {
-            return !Configuration.isInitialized()
-                    || key.startsWith(NS_KEYCLOAK_PREFIX) // once we remove Scope.getPropertyNames, this check can be inverted like in hasInferredValue
+            if (!Configuration.isInitialized()) {
+                if (PropertyMappers.isRuntimeMapProperty(key)) {
+                    return Optional.ofNullable(context.restart(key)).map(ConfigValue::getValue).isPresent();
+                } else {
+                    return true;
+                }
+            }
+            return key.startsWith(NS_KEYCLOAK_PREFIX) // once we remove Scope.getPropertyNames, this check can be inverted like in hasInferredValue
                     || Optional.ofNullable(context.restart(key)).map(ConfigValue::getValue).isPresent();
         } catch (Exception e) {
             return false; // corner case - validation or other failure, we won't report it as having a value

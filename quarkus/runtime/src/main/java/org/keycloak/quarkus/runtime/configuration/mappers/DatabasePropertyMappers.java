@@ -14,6 +14,8 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.keycloak.common.Profile;
@@ -22,6 +24,7 @@ import org.keycloak.config.CachingOptions;
 import org.keycloak.config.CachingOptions.Stack;
 import org.keycloak.config.DatabaseOptions;
 import org.keycloak.config.Option;
+import org.keycloak.config.OptionBuilder;
 import org.keycloak.config.OptionsUtil;
 import org.keycloak.config.TransactionOptions;
 import org.keycloak.config.WildcardOptionsUtil;
@@ -59,8 +62,8 @@ import static org.keycloak.quarkus.runtime.storage.database.jpa.QuarkusJpaConnec
 
 public final class DatabasePropertyMappers implements PropertyMapperGrouping {
     private static final Option<String> SYNTHETIC_RUNTIME_DB_OPTION = DB.toBuilder().synthetic().buildTime(false).build();
-    private static final Option<String> SYNTHETIC_RUNTIME_DB_OPTION_NO_DEFAULT =
-            DB.toBuilder().synthetic().buildTime(false).defaultValue(Optional.empty()).build();
+    private static final Option<String> SYNTHETIC_RUNTIME_DB_OPTION_NO_DEFAULT = new OptionBuilder<>("db-synthetic-no-default",
+            String.class).synthetic().buildTime(false).defaultValue(Optional.empty()).build();
     public static final String PG_TARGET_SERVER_TYPE = "quarkus.datasource.jdbc.additional-jdbc-properties.targetServerType";
     public static final String PG_LOG_SERVER_ERROR_DETAIL = "quarkus.datasource.jdbc.additional-jdbc-properties.logServerErrorDetail";
     public static final String MSSQL_SEND_STRING_PARAMETER_AS_UNICODE = "quarkus.datasource.jdbc.additional-jdbc-properties.sendStringParametersAsUnicode";
@@ -251,6 +254,22 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                 setInputTlsJdbcProperty(DB_MTLS_KEY_STORE_FILE, "sslkey", EnumSet.of(Database.Vendor.POSTGRES)),
                 setInputTlsJdbcProperty(DB_MTLS_KEY_STORE_PASSWORD, "sslpassword", EnumSet.of(Database.Vendor.POSTGRES))
         );
+        
+        List<PropertyMapper<?>> allSourceMappersList = new ArrayList<>(allSourceMappers);
+        allSourceMappersList.add(fromOption(DatabaseOptions.DB_DIALECT)
+                .mapFrom(DatabaseOptions.DB_DIALECT, (name, value, context) -> (name != null && hasNoPackages(name, context)) ? null : value)
+                .to("quarkus.hibernate-orm.dialect")
+                .build());
+        allSourceMappersList.add(fromOption(SYNTHETIC_RUNTIME_DB_OPTION_NO_DEFAULT)
+                .mapFrom(DatabaseOptions.DB_SQL_JPA_DEBUG, (name, value, context) -> (name != null && hasNoPackages(name, context)) ? null : (Boolean.parseBoolean(value) ? Boolean.TRUE.toString() : null))
+                .to("quarkus.hibernate-orm.unsupported-properties.\"hibernate.use_sql_comments\"")
+                .build());
+        allSourceMappersList.add(fromOption(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES)
+                .mapFrom(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES, (name, value, context) -> (name != null && hasNoPackages(name, context)) ? null : value)
+                .to("quarkus.hibernate-orm.log.queries-slower-than-ms")
+                .build());
+        allSourceMappersList.addAll(namedQueryMappers());
+        allSourceMappers = allSourceMappersList;
 
         List<PropertyMapper<?>> result = appendDatasourceMappers(allSourceMappers, Map.of(
                 // Inherit options from the DB mappers
@@ -300,23 +319,14 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                         .build()
         ));
 
-        result.addAll(List.of(
-                fromOption(DatabaseOptions.DB_DIALECT)
-                        .mapFrom(DatabaseOptions.DB_DIALECT)
-                        .to("quarkus.hibernate-orm.dialect")
-                        .build(),
-                fromOption(SYNTHETIC_RUNTIME_DB_OPTION_NO_DEFAULT)
-                        .mapFrom(DatabaseOptions.DB_SQL_JPA_DEBUG,
-                                (name, value, context) -> Boolean.parseBoolean(value) ? Boolean.TRUE.toString() : null)
-                        .to("quarkus.hibernate-orm.unsupported-properties.\"hibernate.use_sql_comments\"")
-                        .build(),
-                fromOption(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES)
-                        .mapFrom(DatabaseOptions.DB_SQL_LOG_SLOW_QUERIES)
-                        .to("quarkus.hibernate-orm.log.queries-slower-than-ms")
-                        .build()
-        ));
-
-        result.addAll(namedQueryMappers());
+        result.add(fromOption(DatabaseOptions.DB_JPA_PACKAGES)
+                .to("quarkus.hibernate-orm.\"<datasource>\".packages")
+                .build());
+        result.add(fromOption(DatabaseOptions.DB_JPA_PACKAGES)
+                .paramLabel("datasource")
+                .to("quarkus.hibernate-orm.\"<datasource>\".datasource")
+                .wildcardMapFrom(DatabaseOptions.DB_JPA_PACKAGES, (name, value, context) -> name == null || name.isEmpty() ? null : name)
+                .build());
 
         return result;
     }
@@ -335,15 +345,29 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
         List<PropertyMapper<?>> mappers = new ArrayList<>();
         for (String queryKey : queryKeys) {
             mappers.add(fromOption(SYNTHETIC_RUNTIME_DB_OPTION_NO_DEFAULT)
-                    .mapFrom(DB, (name, db, context) -> db == null ? null
+                    .mapFrom(DB, (name, db, context) -> {
+                        if (name != null && hasNoPackages(name, context)) {
+                            return null;
+                        }
+                        return db == null ? null
                             : Database.getDatabaseKind(db)
                                     .map(kindToNamedQueries::get)
                                     .map(named -> named.getProperty(queryKey))
-                                    .orElse(null))
+                                    .orElse(null);
+                    })
                     .to("quarkus.hibernate-orm.unsupported-properties.\"" + QUERY_PROPERTY_PREFIX + queryKey + "\"")
                     .build());
         }
         return mappers;
+    }
+
+    private static boolean hasNoPackages(String datasource, io.smallrye.config.ConfigSourceInterceptorContext context) {
+        if (datasource == null) {
+            return Configuration.getOptionalKcValue(DatabaseOptions.DB_JPA_PACKAGES).isEmpty() && (context.restart("kc.db-jpa-packages") == null || context.restart("kc.db-jpa-packages").getValue() == null);
+        }
+        String key = NS_KEYCLOAK_PREFIX + WildcardOptionsUtil.getWildcardNamedKey("db-jpa-packages-<datasource>", datasource);
+        ConfigValue v = context.restart(key);
+        return v == null || v.getValue() == null;
     }
 
     @Override
@@ -355,6 +379,43 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                                 .formatted(DB_POOL_MAX_SIZE.getKey(), JDBC_PING_MIN_POOL_MAX_SIZE, poolMaxSize));
             }
         });
+
+        Set<String> configuredDatasources = new java.util.HashSet<>();
+        for (String propertyName : Configuration.getPropertyNames()) {
+            if (propertyName.startsWith(NS_KEYCLOAK_PREFIX + "db-kind-")) {
+                configuredDatasources.add(propertyName.substring((NS_KEYCLOAK_PREFIX + "db-kind-").length()));
+            }
+        }
+
+        for (String propertyName : Configuration.getPropertyNames()) {
+            if (propertyName.startsWith("quarkus.hibernate-orm.") && propertyName.endsWith("\".datasource")) {
+                Matcher m = Pattern.compile("quarkus\\.hibernate-orm\\.\"(.*)\"\\.datasource").matcher(propertyName);
+                if (m.matches()) {
+                    String puName = m.group(1);
+                    Configuration.getOptionalValue(propertyName).ifPresent(explicitDatasource -> {
+                        if (!puName.equals(explicitDatasource) && !puName.equals("<datasource>")) {
+                            throw new PropertyException("The persistence unit name '" + puName + "' must match its datasource name. You explicitly set the datasource to '" + explicitDatasource + "', which violates this convention.");
+                        }
+                    });
+                }
+            }
+
+            if (propertyName.startsWith(NS_KEYCLOAK_PREFIX)) {
+                PropertyMapper<?> mapper = PropertyMappers.getMapper(propertyName);
+                if (mapper != null && mapper.getOption().getCategory() == org.keycloak.config.OptionCategory.DATABASE_DATASOURCES) {
+                    String optionKey = mapper.getOption().getKey();
+                    if (org.keycloak.config.WildcardOptionsUtil.isWildcardOption(optionKey)) {
+                        String prefix = NS_KEYCLOAK_PREFIX + org.keycloak.config.WildcardOptionsUtil.getWildcardPrefix(optionKey);
+                        if (propertyName.startsWith(prefix)) {
+                            String datasource = propertyName.substring(prefix.length());
+                            if (!configuredDatasources.contains(datasource)) {
+                                throw new PropertyException("Datasource '" + datasource + "' is not configured. Please configure it by setting 'db-kind-" + datasource + "'.");
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private static boolean isJdbcPingStack() {
@@ -647,6 +708,8 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
 
             if (to.startsWith("quarkus.datasource.")) {
                 return to.replaceFirst("quarkus\\.datasource\\.", "quarkus.datasource.\"<datasource>\".");
+            } else if (to.startsWith("quarkus.hibernate-orm.")) {
+                return to.replaceFirst("quarkus\\.hibernate-orm\\.", "quarkus.hibernate-orm.\"<datasource>\".");
             } else if (to.startsWith("kc.db-")) {
                 return to.concat("-<datasource>");
             } else {
