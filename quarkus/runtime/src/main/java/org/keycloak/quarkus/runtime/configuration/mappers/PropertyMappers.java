@@ -92,6 +92,14 @@ public final class PropertyMappers {
         return mapper.forKey(name).getConfigValue(name, context);
     }
 
+    public static ConfigValue getUnsuppressedValue(ConfigSourceInterceptorContext context, String name) {
+        PropertyMapper<?> mapper = getMapper(name);
+        if (mapper == null) {
+            return context.proceed(name);
+        }
+        return mapper.forKey(name).getConfigValue(name, context);
+    }
+
     public static boolean isSpiBuildTimeProperty(String name) {
         // we can't require the new property formant until we're ok with a breaking change
         return isSpiBuildTimeProperty(name, false);

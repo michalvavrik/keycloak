@@ -17,19 +17,20 @@
 
 package com.acme.provider.legacy.jpa.entity;
 
-import java.util.Collections;
 import java.util.Map;
+
+import org.keycloak.acme.test.OverlapEntity;
 import org.keycloak.it.TestProvider;
 
 public class CustomJpaEntityProvider implements TestProvider {
 
     @Override
     public Class[] getClasses() {
-        return new Class[] { Realm.class };
+        return new Class[] { OverlapEntity.class,  Realm.class, KeycloakItH2Dialect.class, UnlistedEntity.class, OrmMappedEntity.class, FallbackEntity.class };
     }
 
     @Override
     public Map<String, String> getManifestResources() {
-        return Collections.singletonMap("persistence.xml", "persistence.xml");
+        return Map.of("persistence.xml", "persistence.xml", "orm.xml", "orm.xml", "custom.xml", "custom.xml");
     }
 }

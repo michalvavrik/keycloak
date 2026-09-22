@@ -203,6 +203,13 @@ public class PropertyMappingInterceptor implements ConfigSourceInterceptor {
 
     private boolean hasValue(String key, ConfigSourceInterceptorContext context) {
         try {
+            if (!Configuration.isInitialized() && key.contains("unsupported-properties")) {
+                ConfigValue val = PropertyMappers.getUnsuppressedValue(context, key);
+                if (val != null && val.getValue() != null) {
+                    return true;
+                }
+                return false;
+            }
             return !Configuration.isInitialized()
                     || key.startsWith(NS_KEYCLOAK_PREFIX) // once we remove Scope.getPropertyNames, this check can be inverted like in hasInferredValue
                     || Optional.ofNullable(context.restart(key)).map(ConfigValue::getValue).isPresent();
@@ -215,6 +222,10 @@ public class PropertyMappingInterceptor implements ConfigSourceInterceptor {
     public ConfigValue getValue(ConfigSourceInterceptorContext context, String name) {
         if (Boolean.TRUE.equals(disable.get())) {
             return context.proceed(name);
+        }
+
+        if (!Configuration.isInitialized() && name.contains("unsupported-properties")) {
+            return PropertyMappers.getUnsuppressedValue(context, name);
         }
 
         // Call through NestedPropertyMappingInterceptor to track what we are currently getting the value for

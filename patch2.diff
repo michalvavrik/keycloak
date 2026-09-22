@@ -1,0 +1,15 @@
+--- quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/PropertyMappingInterceptor.java
++++ quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/PropertyMappingInterceptor.java
+@@ -212,6 +212,12 @@
+ 
+     private boolean hasValue(String key, ConfigSourceInterceptorContext context) {
+         try {
++            if (!Configuration.isInitialized() && key.contains("unsupported-properties")) {
++                PropertyMapper<?> mapper = PropertyMappers.getMapper(key);
++                if (mapper != null) {
++                    return mapper.forKey(key).getConfigValue(key, context).getValue() != null;
++                }
++            }
+             return !Configuration.isInitialized()
+                     || key.startsWith(NS_KEYCLOAK_PREFIX) // once we remove Scope.getPropertyNames, this check can be inverted like in hasInferredValue
+                     || Optional.ofNullable(context.restart(key)).map(ConfigValue::getValue).isPresent();

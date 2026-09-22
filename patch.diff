@@ -1,0 +1,11 @@
+--- quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/PropertyMappingInterceptor.java
++++ quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/PropertyMappingInterceptor.java
+@@ -218,7 +218,7 @@
+             if (name.contains("unsupported-properties")) {
+                 PropertyMapper<?> mapper = PropertyMappers.getMapper(name);
+                 if (mapper != null) {
+-                    return mapper.getConfigValue(context);
++                    return mapper.forKey(name).getConfigValue(name, context);
+                 }
+             }
+             return context.proceed(name);

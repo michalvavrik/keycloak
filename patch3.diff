@@ -1,0 +1,16 @@
+--- quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/mappers/PropertyMappers.java
++++ quarkus/runtime/src/main/java/org/keycloak/quarkus/runtime/configuration/mappers/PropertyMappers.java
+@@ -87,6 +87,14 @@
+         return mapper.forKey(name).getConfigValue(name, context);
+     }
+ 
++    public static ConfigValue getUnsuppressedValue(ConfigSourceInterceptorContext context, String name) {
++        PropertyMapper<?> mapper = getMapper(name);
++        if (mapper == null) {
++            return context.proceed(name);
++        }
++        return mapper.forKey(name).getConfigValue(name, context);
++    }
++
+     public static String formatValue(String property, String value) {
+         PropertyMapper<?> mapper = getMapper(property);
