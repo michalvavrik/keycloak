@@ -10,6 +10,7 @@ import org.keycloak.client.admin.cli.commands.AbstractTargetAuthOptionsCmd;
 import org.keycloak.client.admin.cli.v2.KcAdmV2CommandDescriptor.CommandDescriptor;
 import org.keycloak.client.cli.common.Globals;
 import org.keycloak.client.cli.config.ConfigData;
+import org.keycloak.client.cli.util.IoUtil;
 import org.keycloak.client.cli.util.OutputUtil;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -118,6 +119,7 @@ final class KcAdmV2EditCmd extends KcAdmV2RequestExecutor {
 
     private String openInEditor(String editor, String content) throws IOException, InterruptedException {
         Path tempFile = Files.createTempFile("kcadm-edit-", ".json");
+        IoUtil.ensureFile(tempFile);
         try {
             Files.writeString(tempFile, content);
 
