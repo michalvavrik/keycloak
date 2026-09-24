@@ -2,10 +2,12 @@ package org.keycloak.quarkus.runtime.configuration;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import org.keycloak.connections.jpa.util.JpaUtils;
 import org.keycloak.config.database.Database;
 import org.keycloak.quarkus.runtime.Environment;
 import org.keycloak.quarkus.runtime.configuration.mappers.DatabasePropertyMappers;
@@ -25,6 +27,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -862,5 +865,182 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
         assertConfig("db-dialect", PostgreSQLDialect.class.getName());
         assertConfig("db-dialect-user-store", MariaDBDialect.class.getName());
         assertExternalConfig("quarkus.hibernate-orm.dialect", PostgreSQLDialect.class.getName());
+    }
+
+    @Test
+    public void namedDatasourceHibernatePropertiesRequirePersistenceUnit() {
+        ConfigArgsConfigSource.setCliArgs("--db-kind-my-store=mariadb", "--db-debug-jpql-my-store=true",
+                "--db-log-slow-queries-threshold-my-store=5000", "--db-schema-my-store=other");
+        initConfig();
+
+        // the datasource options are resolved as usual
+        assertConfig(Map.of(
+                "db-dialect-my-store", MariaDBDialect.class.getName(),
+                "db-debug-jpql-my-store", "true",
+                "db-log-slow-queries-threshold-my-store", "5000",
+                "db-schema-my-store", "other"));
+
+        // but they do not configure a persistence unit, because db-jpa-packages-my-store does not define one
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".packages");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".datasource");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".dialect");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\"");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".database.default-schema");
+    }
+
+    @Test
+    public void namedDatasourcePersistenceUnitProperties() {
+        ConfigArgsConfigSource.setCliArgs("--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities,org.example.more",
+                "--db-debug-jpql-my-store=true", "--db-log-slow-queries-threshold-my-store=5000", "--db-schema-my-store=other");
+        initConfig();
+
+        assertExternalConfig(Map.of(
+                "quarkus.hibernate-orm.\"my-store\".packages", "org.example.entities,org.example.more",
+                "quarkus.hibernate-orm.\"my-store\".datasource", "my-store",
+                "quarkus.hibernate-orm.\"my-store\".dialect", MariaDBDialect.class.getName(),
+                "quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\"", "true",
+                "quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", "5000",
+                "quarkus.hibernate-orm.\"my-store\".database.default-schema", "other"));
+
+        // Keycloak's named queries belong to the default persistence unit only
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"kc.query.deleteExpiredClientSessions[native]\"");
+    }
+
+    @Test
+    public void namedDatasourcePersistenceUnitDefaultsAndOverrides() {
+        ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities",
+                "--db-dialect-my-store=org.example.MyDialect");
+        initConfig();
+
+        assertExternalConfig(Map.of(
+                "quarkus.hibernate-orm.\"my-store\".dialect", "org.example.MyDialect",
+                "quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", "10000"));
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\"");
+        assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".database.default-schema");
+
+        // the default persistence unit is not affected by the named one
+        assertExternalConfig("quarkus.hibernate-orm.dialect", PostgreSQLDialect.class.getName());
+        assertExternalConfig("quarkus.hibernate-orm.log.queries-slower-than-ms", "10000");
+        assertExternalConfigNull("quarkus.hibernate-orm.unsupported-properties.\"hibernate.use_sql_comments\"");
+    }
+
+    @Test
+    public void persistenceUnitPropertiesAdvertisedForConfiguredUnitOnly() {
+        // Quarkus discovers the configuration of a named persistence unit from the property names, so the properties
+        // of a configured unit must be advertised, including the defaults of the Keycloak options
+        ConfigArgsConfigSource.setCliArgs("--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities",
+                "--db-kind-other-store=mariadb", "--db-debug-jpql-other-store=true");
+        initConfig();
+
+        Set<String> names = StreamSupport.stream(Configuration.getPropertyNames().spliterator(), false).collect(Collectors.toSet());
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".packages"));
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".datasource"));
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".dialect"));
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms"));
+        assertFalse(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\""));
+        assertFalse(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".database.default-schema"));
+        assertTrue(names.toString(), names.stream().noneMatch(n -> n.startsWith("quarkus.hibernate-orm.\"other-store\"")));
+        // the Keycloak options of the datasource are advertised as before
+        assertTrue(names.toString(), names.contains("kc.db-dialect-other-store"));
+        assertTrue(names.toString(), names.contains("kc.db-log-slow-queries-threshold-other-store"));
+    }
+
+    private static final Map<String, String> RAW_HIBERNATE_PROPERTIES = Map.of(
+            "quarkus.hibernate-orm.\"my-store\".log.sql", "true",
+            "quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", "777",
+            "quarkus.hibernate-orm.\"my-store\".database.default-schema", "raw",
+            "quarkus.hibernate-orm.\"my-store\".dialect", "org.example.RawDialect",
+            "quarkus.hibernate-orm.log.sql", "true",
+            "quarkus.hibernate-orm.log.queries-slower-than-ms", "888",
+            "quarkus.hibernate-orm.database.default-schema", "raw-default");
+
+    private static void withRawHibernateProperties(Runnable test) {
+        // the configuration reset of the harness restores the system properties, so they are set right before the test
+        RAW_HIBERNATE_PROPERTIES.forEach(System::setProperty);
+        try {
+            test.run();
+        } finally {
+            RAW_HIBERNATE_PROPERTIES.keySet().forEach(System::clearProperty);
+        }
+    }
+
+    @Test
+    public void rawQuarkusPropertiesOfPersistenceUnits() {
+        // Hibernate ORM properties Keycloak does not map are configured with the raw (unsupported) Quarkus properties,
+        // and a raw property wins over the default of a Keycloak option
+        withRawHibernateProperties(() -> {
+            ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities");
+            initConfig();
+
+            assertExternalConfig(Map.of(
+                    "quarkus.hibernate-orm.\"my-store\".log.sql", "true",
+                    "quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", "777",
+                    "quarkus.hibernate-orm.\"my-store\".database.default-schema", "raw",
+                    // db-dialect-my-store is derived from db-kind-my-store, so it is always set
+                    "quarkus.hibernate-orm.\"my-store\".dialect", MariaDBDialect.class.getName(),
+                    "quarkus.hibernate-orm.log.sql", "true",
+                    "quarkus.hibernate-orm.log.queries-slower-than-ms", "888",
+                    "quarkus.hibernate-orm.database.default-schema", "raw-default"));
+        });
+    }
+
+    @Test
+    public void keycloakOptionsWinOverRawQuarkusProperties() {
+        withRawHibernateProperties(() -> {
+            ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-schema=kc-default", "--db-log-slow-queries-threshold=5000",
+                    "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities",
+                    "--db-dialect-my-store=org.example.KcDialect", "--db-log-slow-queries-threshold-my-store=1234", "--db-schema-my-store=kc");
+            initConfig();
+
+            assertExternalConfig(Map.of(
+                    "quarkus.hibernate-orm.\"my-store\".log.sql", "true",
+                    "quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", "1234",
+                    "quarkus.hibernate-orm.\"my-store\".database.default-schema", "kc",
+                    "quarkus.hibernate-orm.\"my-store\".dialect", "org.example.KcDialect",
+                    "quarkus.hibernate-orm.log.queries-slower-than-ms", "5000",
+                    "quarkus.hibernate-orm.database.default-schema", "kc-default"));
+        });
+    }
+
+    @Test
+    public void rawQuarkusPropertiesDoNotDefinePersistenceUnitsOfOtherDatasources() {
+        // a raw property of a datasource without a configured persistence unit is passed through untouched, and the
+        // Keycloak options of that datasource still do not configure a persistence unit
+        System.setProperty("quarkus.hibernate-orm.\"other-store\".log.sql", "true");
+        try {
+            ConfigArgsConfigSource.setCliArgs("--db-kind-other-store=mariadb", "--db-debug-jpql-other-store=true");
+            initConfig();
+
+            assertExternalConfig("quarkus.hibernate-orm.\"other-store\".log.sql", "true");
+            assertExternalConfigNull("quarkus.hibernate-orm.\"other-store\".dialect");
+            assertExternalConfigNull("quarkus.hibernate-orm.\"other-store\".unsupported-properties.\"hibernate.use_sql_comments\"");
+        } finally {
+            System.clearProperty("quarkus.hibernate-orm.\"other-store\".log.sql");
+        }
+    }
+
+    @Test
+    public void defaultPersistenceUnitHibernatePropertiesUnset() {
+        ConfigArgsConfigSource.setCliArgs("--db=mariadb", "--db-debug-jpql=false");
+        initConfig();
+
+        assertExternalConfigNull("quarkus.hibernate-orm.database.default-schema");
+        assertExternalConfigNull("quarkus.hibernate-orm.unsupported-properties.\"hibernate.use_sql_comments\"");
+        assertExternalConfig("quarkus.hibernate-orm.log.queries-slower-than-ms", "10000");
+    }
+
+    @Test
+    public void defaultPersistenceUnitHibernateProperties() {
+        ConfigArgsConfigSource.setCliArgs("--db=mariadb", "--db-schema=other", "--db-debug-jpql=true", "--db-log-slow-queries-threshold=5000");
+        initConfig();
+
+        assertExternalConfig(Map.of(
+                "quarkus.hibernate-orm.dialect", MariaDBDialect.class.getName(),
+                "quarkus.hibernate-orm.database.default-schema", "other",
+                "quarkus.hibernate-orm.unsupported-properties.\"hibernate.use_sql_comments\"", "true",
+                "quarkus.hibernate-orm.log.queries-slower-than-ms", "5000",
+                "quarkus.hibernate-orm.unsupported-properties.\"kc.query.deleteExpiredClientSessions[native]\"",
+                JpaUtils.loadSpecificNamedQueries("mariadb").getProperty("deleteExpiredClientSessions[native]")));
     }
 }

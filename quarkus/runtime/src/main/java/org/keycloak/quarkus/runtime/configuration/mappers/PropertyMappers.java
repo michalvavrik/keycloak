@@ -92,6 +92,23 @@ public final class PropertyMappers {
         return mapper.forKey(name).getConfigValue(name, context);
     }
 
+    /**
+     * Whether the name is a key of the {@code unsupported-properties} map of a Hibernate ORM persistence unit
+     * (e.g. {@code quarkus.hibernate-orm."<unit>".unsupported-properties."hibernate.use_sql_comments"}).
+     * Keycloak only contributes such keys from runtime options.
+     */
+    public static boolean isHibernateUnsupportedProperty(String name) {
+        return name.startsWith("quarkus.hibernate-orm.") && name.contains(".unsupported-properties.");
+    }
+
+    /**
+     * Whether the name is a property of a named Hibernate ORM persistence unit, e.g.
+     * {@code quarkus.hibernate-orm."<unit>".dialect}.
+     */
+    public static boolean isNamedPersistenceUnitProperty(String name) {
+        return name.startsWith("quarkus.hibernate-orm.\"");
+    }
+
     public static boolean isSpiBuildTimeProperty(String name) {
         // we can't require the new property formant until we're ok with a breaking change
         return isSpiBuildTimeProperty(name, false);
@@ -179,6 +196,13 @@ public final class PropertyMappers {
 
     public static PropertyMapper<?> getMapper(String property) {
         return getMapper(property, null);
+    }
+
+    /**
+     * All the mappers of the given property, e.g. of an option mapped to several Quarkus properties.
+     */
+    public static List<PropertyMapper<?>> getMappers(String property) {
+        return MAPPERS.getOrDefault(property, Collections.emptyList());
     }
 
     public static PropertyMapper<?> getMapperByCliKey(String cliKey) {

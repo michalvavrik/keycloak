@@ -751,6 +751,7 @@ Defining multiple datasources works like defining a single datasource, with one 
 In order to enable an additional datasource, you need to set up 2 things - the JPA `persistence.xml` file and {project_name} configuration.
 The `persistence.xml` file serves to specify persistence units as part of the Jakarta Persistence API standard, and is required for proper configuration propagation to the Hibernate ORM framework.
 When you complete the part with the `persistence.xml` file, you need to set up {project_name} configuration accordingly.
+Alternatively, you can define the persistence unit with {project_name} options instead of a `persistence.xml` file, see <<persistence-unit-options,Defining the persistence unit with options>>.
 
 The additional datasource properties might be specified via the standard config sources like CLI, `keycloak.conf`, or environment variables.
 
@@ -804,6 +805,36 @@ Therefore, you can enable the additional datasource `user-store` as follows (`po
 <@kc.start parameters="--db-kind-user-store=postgres"/>
 
 After specifying the db-kind for the datasource, all database-kind–specific defaults (such as the driver and dialect) are automatically applied, just like for the main datasource.
+
+[[persistence-unit-options]]
+=== Defining the persistence unit with options
+
+Instead of packaging a `persistence.xml` file with your extension, you can define the persistence unit of an additional datasource with the build time option `db-jpa-packages-<datasource>`.
+Its value is a comma-separated list of the packages that contain the JPA entities of the persistence unit. Every entity in these packages, including their sub-packages, is managed by the persistence unit.
+
+The persistence unit has the same name as the datasource, and it is configured through the options of the datasource: `db-kind-<datasource>` is required, and options such as `db-dialect-<datasource>`, `db-schema-<datasource>`, `db-debug-jpql-<datasource>` or `db-log-slow-queries-threshold-<datasource>` apply to the persistence unit of the datasource.
+
+For example, the following defines the persistence unit `user-store` for the datasource of the same name, managing the entities in the package `org.your.extension.entity`:
+
+<@kc.build parameters="--db-kind-user-store=postgres --db-jpa-packages-user-store=org.your.extension.entity"/>
+
+Your extension then obtains the persistence unit by the name of the datasource:
+
+[source,java]
+----
+JpaConnectionProvider provider = session.getProvider(JpaConnectionProvider.class, "user-store");
+EntityManager entityManager = provider.getEntityManager();
+----
+
+NOTE: JPA entities of an extension that are not managed by any additional persistence unit, that is neither listed in a `persistence.xml` file nor located in the packages of a `db-jpa-packages-<datasource>` option, are managed by the main {project_name} persistence unit.
+
+Hibernate ORM settings of the persistence unit that have no {project_name} option can be set with the raw Quarkus properties in `conf/quarkus.properties`, which is **unsupported** as described in the guide <@links.server id="configuration"/>.
+{project_name} maps its options to the Quarkus properties with the quoted datasource name, so a raw property that complements the options must use the same form, for example `quarkus.hibernate-orm."user-store".log.sql=true`.
+A {project_name} option always takes precedence over the corresponding raw Quarkus property.
+
+WARNING: Quarkus reads the configuration of a persistence unit, or of a datasource, in one form only: either with the quoted name or with the unquoted name, whichever it encounters first.
+Combining the {project_name} options of a datasource, which use the quoted form, with raw properties in the unquoted form therefore silently ignores one of them.
+The unquoted form described in <<_backward_compatibility_for_the_quarkus_properties,Backward compatibility for the `quarkus.properties`>> is meant for a datasource, and its persistence unit, configured entirely with raw Quarkus properties.
 
 === Configuration via environment variables
 If you do not want to configure the datasource via CLI or `keycloak.conf` properties, you can use the environment variables.
