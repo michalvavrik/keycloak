@@ -29,6 +29,7 @@ public class KeycloakServerConfigBuilder {
     private boolean externalInfinispan = false;
     private String shutdownDelay = "0s";
     private String shutdownTimeout = "1s";
+    private String configFile;
 
     private KeycloakServerConfigBuilder(String command) {
         this.command = command;
@@ -162,6 +163,18 @@ public class KeycloakServerConfigBuilder {
      */
     public KeycloakServerConfigBuilder option(String key, String value) {
         options.put(key, value);
+        return this;
+    }
+
+    /**
+     * Set the configuration file of the server (the {@code --config-file} option), which replaces the default
+     * {@code conf/keycloak.conf}. It is the way to set the options that cannot be set on the command line.
+     *
+     * @param path the path to the configuration file, with the {@code .conf} extension
+     * @return
+     */
+    public KeycloakServerConfigBuilder configFile(String path) {
+        this.configFile = path;
         return this;
     }
 
@@ -313,6 +326,10 @@ public class KeycloakServerConfigBuilder {
         log.build();
 
         List<String> args = new LinkedList<>();
+        if (configFile != null) {
+            // an option of the root command, which precedes the command
+            args.add("--config-file=" + configFile);
+        }
         args.add(command);
         for (Map.Entry<String, String> e : options.entrySet()) {
             args.add("--" + e.getKey() + "=" + e.getValue());

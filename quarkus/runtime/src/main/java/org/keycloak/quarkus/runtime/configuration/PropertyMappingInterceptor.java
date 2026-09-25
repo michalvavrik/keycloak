@@ -221,8 +221,11 @@ public class PropertyMappingInterceptor implements ConfigSourceInterceptor {
             }
             if (PropertyMappers.isNamedPersistenceUnitProperty(key)) {
                 // Quarkus defines a persistence unit for every name it finds a property of, so a property of a named
-                // persistence unit is advertised only when it resolves to a value (see DatabasePropertyMappers.Datasources)
-                return Optional.ofNullable(context.restart(key)).map(ConfigValue::getValue).isPresent();
+                // persistence unit is advertised only when Keycloak provides its value, that is a set option, a Keycloak
+                // default or a value derived from another option (see DatabasePropertyMappers.Datasources), or when the
+                // user set the Quarkus property itself. Like for the default unit, an unset option is not advertised:
+                // Quarkus supplies the default of a property, such as query.query-plan-cache-max-size, for any unit name.
+                return isProvidedValue(context.restart(key));
             }
             return !Configuration.isInitialized()
                     || key.startsWith(NS_KEYCLOAK_PREFIX) // once we remove Scope.getPropertyNames, this check can be inverted like in hasInferredValue
@@ -230,6 +233,15 @@ public class PropertyMappingInterceptor implements ConfigSourceInterceptor {
         } catch (Exception e) {
             return false; // corner case - validation or other failure, we won't report it as having a value
         }
+    }
+
+    /**
+     * Whether the value is provided by Keycloak (a mapped or derived value and a Keycloak default carry no config source
+     * name) or set by the user, as opposed to no value or a default that Quarkus supplies.
+     */
+    private static boolean isProvidedValue(ConfigValue value) {
+        return value != null && value.getValue() != null
+                && (value.getConfigSourceName() == null || Configuration.isUserModifiable(value));
     }
 
     /**

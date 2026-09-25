@@ -63,8 +63,12 @@ public class PersistenceUnitPropertiesMappingTest {
 
         assertEquals("true", String.valueOf(props.get("hibernate.use_sql_comments")));
         assertEquals("5000", String.valueOf(props.get("hibernate.log_slow_query")));
+        // the Hibernate ORM option from the configuration file, see CONFIG_FILE
+        assertEquals("512", String.valueOf(props.get("hibernate.query.plan_cache_max_size")));
 
         var config = ConfigProvider.getConfig();
+        assertEquals("512", config.getValue("kc.db-orm-query-query-plan-cache-max-size", String.class));
+        assertEquals("512", config.getValue("quarkus.hibernate-orm.query.query-plan-cache-max-size", String.class));
         assertEquals("50", config.getValue("quarkus.datasource.jdbc.initial-size", String.class));
         assertEquals("50", config.getValue("quarkus.datasource.jdbc.min-size", String.class));
         assertEquals("200", config.getValue("quarkus.datasource.jdbc.max-size", String.class));
@@ -82,6 +86,9 @@ public class PersistenceUnitPropertiesMappingTest {
         // Hibernate properties for named PU must be ignored when packages are not configured
         assertFalse(config.getOptionalValue("quarkus.hibernate-orm.\"my-store\".unsupported-properties.\"hibernate.use_sql_comments\"", String.class).isPresent());
         assertFalse(config.getOptionalValue("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms", String.class).isPresent());
+        assertEquals("128", config.getValue("kc.db-orm-query-query-plan-cache-max-size-my-store", String.class));
+        // the option does not reach the unit that db-jpa-packages-my-store does not define
+        assertFalse(config.getOptionalValue("quarkus.hibernate-orm.\"my-store\".query.query-plan-cache-max-size", String.class).isPresent());
         assertFalse(CDI.current().select(SessionFactory.class, new PersistenceUnitLiteral("my-store")).isResolvable());
     }
 
@@ -94,6 +101,7 @@ public class PersistenceUnitPropertiesMappingTest {
         assertEquals("3000", String.valueOf(props.get("hibernate.log_slow_query")));
         assertEquals("PUBLIC", String.valueOf(props.get("hibernate.default_schema")));
         assertEquals("org.keycloak.connections.jpa.dialect.KeycloakH2Dialect", String.valueOf(props.get("hibernate.dialect")));
+        assertEquals("256", String.valueOf(props.get("hibernate.query.plan_cache_max_size")));
 
         // the unit is available as a named JPA connection provider
         var provider = session.getProvider(JpaConnectionProvider.class, "my-store-pkg");
@@ -111,12 +119,20 @@ public class PersistenceUnitPropertiesMappingTest {
         assertEquals("PUBLIC", config.getValue("quarkus.hibernate-orm.\"my-store-pkg\".database.default-schema", String.class));
         assertEquals("org.example.entities", config.getValue("quarkus.hibernate-orm.\"my-store-pkg\".packages", String.class));
         assertEquals("my-store-pkg", config.getValue("quarkus.hibernate-orm.\"my-store-pkg\".datasource", String.class));
+        assertEquals("256", config.getValue("quarkus.hibernate-orm.\"my-store-pkg\".query.query-plan-cache-max-size", String.class));
     }
 
     public static class SqlDebugAndSlowQueryServerConfig implements KeycloakServerConfig {
+
+        /**
+         * The Hibernate ORM options (db-orm-*) cannot be set on the command line, so they are set through a configuration file
+         */
+        private static final String CONFIG_FILE = "/org/keycloak/tests/db/persistence-unit-properties.conf";
+
         @Override
         public KeycloakServerConfigBuilder configure(KeycloakServerConfigBuilder config) {
             return config
+                    .configFile(getClass().getResource(CONFIG_FILE).getFile())
                     .option("db-debug-jpql", "true")
                     .option("db-log-slow-queries-threshold", "5000")
                     .option("db-pool-initial-size", "50")

@@ -1,5 +1,6 @@
 package org.keycloak.quarkus.runtime.configuration;
 
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -944,6 +945,76 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
         // the Keycloak options of the datasource are advertised as before
         assertTrue(names.toString(), names.contains("kc.db-dialect-other-store"));
         assertTrue(names.toString(), names.contains("kc.db-log-slow-queries-threshold-other-store"));
+    }
+
+    @Test
+    public void hibernateOrmOptionsFromEnvironmentVariables() {
+        // the Hibernate ORM options cannot be set on the command line (see PicocliTest), they are set through the other
+        // configuration sources, and like the other database options they apply to the persistence unit of a named
+        // datasource with the -<datasource> suffix
+        putEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "512");
+        putEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE_MY_STORE", "256");
+        putEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE_OTHER_STORE", "128");
+        ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities",
+                "--db-kind-other-store=mariadb");
+        initConfig();
+
+        assertConfig(Map.of(
+                "db-orm-query-query-plan-cache-max-size", "512",
+                "db-orm-query-query-plan-cache-max-size-my-store", "256",
+                "db-orm-query-query-plan-cache-max-size-other-store", "128"));
+        assertExternalConfig(Map.of(
+                "quarkus.hibernate-orm.query.query-plan-cache-max-size", "512",
+                "quarkus.hibernate-orm.\"my-store\".query.query-plan-cache-max-size", "256"));
+        // db-jpa-packages-other-store does not define a persistence unit for other-store, so the option does not reach
+        // its property, which stays at the default Quarkus supplies for any unit name (see QuarkusDefaultsTestConfigSource)
+        assertExternalConfig("quarkus.hibernate-orm.\"other-store\".query.query-plan-cache-max-size", QuarkusDefaultsTestConfigSource.QUERY_PLAN_CACHE_MAX_SIZE_DEFAULT);
+
+        // Quarkus discovers the properties from the property names, and defines a persistence unit for every name it
+        // finds, so the property of other-store must not be advertised although it resolves to the Quarkus default
+        Set<String> names = StreamSupport.stream(Configuration.getPropertyNames().spliterator(), false).collect(Collectors.toSet());
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.query.query-plan-cache-max-size"));
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".query.query-plan-cache-max-size"));
+        assertTrue(names.toString(), names.stream().noneMatch(n -> n.startsWith("quarkus.hibernate-orm.\"other-store\"")));
+    }
+
+    @Test
+    public void hibernateOrmOptionsFromConfigurationFile() {
+        String configFile = Paths.get("src/test/resources/conf/hibernate-orm.conf").toAbsolutePath().toString();
+        setSystemProperty(KeycloakPropertiesConfigSource.KEYCLOAK_CONFIG_FILE_PROP, configFile, () -> {
+            ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities");
+            initConfig();
+
+            assertConfig(Map.of(
+                    "db-orm-query-query-plan-cache-max-size", "1024",
+                    "db-orm-query-query-plan-cache-max-size-my-store", "64"));
+            assertExternalConfig(Map.of(
+                    "quarkus.hibernate-orm.query.query-plan-cache-max-size", "1024",
+                    "quarkus.hibernate-orm.\"my-store\".query.query-plan-cache-max-size", "64"));
+        });
+    }
+
+    @Test
+    public void hibernateOrmOptionsUnsetLeaveTheQuarkusDefaults() {
+        ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities",
+                "--db-kind-other-store=mariadb");
+        initConfig();
+
+        assertConfigNull("db-orm-query-query-plan-cache-max-size");
+        assertConfigNull("db-orm-query-query-plan-cache-max-size-my-store");
+        // the options have no default of their own, the Quarkus defaults apply (see QuarkusDefaultsTestConfigSource)
+        assertExternalConfig(Map.of(
+                "quarkus.hibernate-orm.query.query-plan-cache-max-size", QuarkusDefaultsTestConfigSource.QUERY_PLAN_CACHE_MAX_SIZE_DEFAULT,
+                "quarkus.hibernate-orm.\"my-store\".query.query-plan-cache-max-size", QuarkusDefaultsTestConfigSource.QUERY_PLAN_CACHE_MAX_SIZE_DEFAULT));
+
+        // an unset option is not advertised, neither for the default unit nor for a named unit, defined or not: Quarkus
+        // defines a unit for every advertised name, and applies its own default anyway. A Keycloak default, such as the
+        // slow query threshold, is advertised for the defined unit as before.
+        Set<String> names = StreamSupport.stream(Configuration.getPropertyNames().spliterator(), false).collect(Collectors.toSet());
+        assertFalse(names.toString(), names.contains("quarkus.hibernate-orm.query.query-plan-cache-max-size"));
+        assertFalse(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".query.query-plan-cache-max-size"));
+        assertTrue(names.toString(), names.contains("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms"));
+        assertTrue(names.toString(), names.stream().noneMatch(n -> n.startsWith("quarkus.hibernate-orm.\"other-store\"")));
     }
 
     private static final Map<String, String> RAW_HIBERNATE_PROPERTIES = Map.of(

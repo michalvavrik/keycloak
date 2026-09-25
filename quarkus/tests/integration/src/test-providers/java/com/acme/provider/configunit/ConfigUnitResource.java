@@ -26,7 +26,8 @@ import org.hibernate.SessionFactory;
 public class ConfigUnitResource implements RealmResourceProvider {
 
     private static final List<String> SETTINGS = List.of("hibernate.dialect", "hibernate.default_schema",
-            "hibernate.use_sql_comments", "hibernate.log_slow_query", "hibernate.jdbc.batch_size", "hibernate.show_sql");
+            "hibernate.use_sql_comments", "hibernate.log_slow_query", "hibernate.jdbc.batch_size", "hibernate.show_sql",
+            "hibernate.query.plan_cache_max_size");
 
     private final KeycloakSession session;
 

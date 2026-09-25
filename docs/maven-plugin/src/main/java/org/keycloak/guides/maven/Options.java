@@ -42,6 +42,9 @@ public class Options {
         mappers.addAll(PropertyMappers.getWildcardMappers());
         mappers.stream()
                 .filter(m -> !m.isHidden())
+                // options that cannot be set on the command line are set through the other configuration sources only,
+                // they are not listed with the command line options (see Option#isCli)
+                .filter(m -> m.getOption().isCli())
                 .filter(propertyMapper -> Objects.nonNull(propertyMapper.getDescription()))
                 .map(m -> new Option(m.getFrom(),
                         m.getCategory(),

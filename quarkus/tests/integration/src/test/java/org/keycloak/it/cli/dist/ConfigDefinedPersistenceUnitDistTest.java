@@ -37,6 +37,7 @@ import org.keycloak.it.junit5.extension.RawDistOnly;
 import org.keycloak.it.junit5.extension.StopServer.Mode;
 import org.keycloak.it.junit5.extension.TestProvider;
 import org.keycloak.it.utils.RawDistRootPath;
+import org.keycloak.it.utils.RawKeycloakDistribution;
 
 import com.acme.provider.configunit.ConfigUnitTestProvider;
 import org.junit.jupiter.api.Test;
@@ -85,6 +86,9 @@ public class ConfigDefinedPersistenceUnitDistTest {
         assertEquals("10000", settings.get("hibernate.log_slow_query"));
         assertNull(settings.get("hibernate.use_sql_comments"), settings.toString());
         assertNull(settings.get("hibernate.default_schema"), settings.toString());
+        // the unset Hibernate ORM option leaves the Quarkus default, for the named and the default unit alike
+        assertEquals("2048", settings.get("hibernate.query.plan_cache_max_size"));
+        assertEquals("2048", settings("default").get("hibernate.query.plan_cache_max_size"));
         runner.stop();
 
         // started with the runtime options: they reach the unit without a rebuild
@@ -145,6 +149,32 @@ public class ConfigDefinedPersistenceUnitDistTest {
             runner.stop();
         } finally {
             Files.deleteIfExists(quarkusProperties);
+        }
+    }
+
+    @Test
+    void hibernateOrmOptions(KeycloakRunner runner) {
+        // the Hibernate ORM options (db-orm-*) cannot be set on the command line, and they are not in the help
+        CLIResult result = runner.run(concat(BUILD, "--db-orm-query-query-plan-cache-max-size-my-store=256"));
+        result.assertError("Option: '--db-orm-query-query-plan-cache-max-size-my-store' cannot be set on the command line. "
+                + "Set it with the environment variable 'KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE_MY_STORE' or as 'db-orm-query-query-plan-cache-max-size-my-store' in the configuration file instead.");
+        result = runner.run("start", "--help-all");
+        result.assertNoMessageGiven("--db-schema", "db-orm-");
+
+        // they are set through the other configuration sources: the environment variables and the configuration file
+        RawKeycloakDistribution rawDist = runner.getDistribution(RawKeycloakDistribution.class);
+        runner.setEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "512");
+        rawDist.setProperty("db-orm-query-query-plan-cache-max-size-my-store", "256");
+        try {
+            runner.run(BUILD).assertBuild();
+            result = runner.run(START);
+            result.assertStarted();
+            assertUnitDefined(result);
+            assertEquals("512", settings("default").get("hibernate.query.plan_cache_max_size"));
+            assertEquals("256", settings(UNIT).get("hibernate.query.plan_cache_max_size"));
+            runner.stop();
+        } finally {
+            rawDist.removeProperty("db-orm-query-query-plan-cache-max-size-my-store");
         }
     }
 

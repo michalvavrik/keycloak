@@ -254,9 +254,10 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                 setInputTlsJdbcProperty(DB_MTLS_KEY_STORE_PASSWORD, "sslpassword", EnumSet.of(Database.Vendor.POSTGRES))
         );
         
-        // Hibernate ORM configuration of the default persistence unit. Named datasources get the same mappers
-        // (e.g. db-dialect-<datasource>), targeting the persistence unit that db-jpa-packages-<datasource> defines
-        // for the datasource, see Datasources#appendDatasourceMappers.
+        // Hibernate ORM configuration of the default persistence unit, including the Quarkus Hibernate ORM properties
+        // exposed as db-orm-* options (see DatabaseOptions#DB_ORM_QUERY_PLAN_CACHE_MAX_SIZE). Named datasources get the
+        // same mappers (e.g. db-dialect-<datasource>), targeting the persistence unit that db-jpa-packages-<datasource>
+        // defines for the datasource, see Datasources#appendDatasourceMappers.
         List<PropertyMapper<?>> hibernateOrmMappers = List.of(
                 fromOption(DatabaseOptions.DB_DIALECT)
                         .mapFrom(DatabaseOptions.DB_DIALECT)
@@ -275,6 +276,9 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                 fromOption(DatabaseOptions.DB_SCHEMA)
                         .mapFrom(DatabaseOptions.DB_SCHEMA)
                         .to("quarkus.hibernate-orm.database.default-schema")
+                        .build(),
+                fromOption(DatabaseOptions.DB_ORM_QUERY_PLAN_CACHE_MAX_SIZE)
+                        .to("quarkus.hibernate-orm.query.query-plan-cache-max-size")
                         .build()
         );
 

@@ -737,6 +737,34 @@ If you are explicitly configuring the `wait_timeout` in your database, it is nec
 to be your `wait_timeout` minus a few minutes. Failure to correctly configure the `db-pool-max-lifetime` will result in
 {project_name} logging a warning on startup.
 
+[[hibernate-orm-options]]
+== Configuring Hibernate ORM
+
+{project_name} exposes selected properties of the Quarkus Hibernate ORM extension as options with the `db-orm-` prefix.
+The name of such an option is the Quarkus property without its `quarkus.hibernate-orm.` prefix, with the dots replaced by dashes.
+For example, the option `db-orm-query-query-plan-cache-max-size` sets the Quarkus property `quarkus.hibernate-orm.query.query-plan-cache-max-size`, and it is a build time option like the Quarkus property.
+
+The Hibernate ORM properties are too many for the command line, so these options are not available as command-line parameters, and they are not listed in the command-line help, in the shell completion, or in the <@links.server id="all-config"/> guide.
+Set them through the other configuration sources described in <@links.server id="configuration"/>, for example as an environment variable:
+
+[source,bash]
+----
+export KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE=512
+----
+
+or in the `conf/keycloak.conf` file:
+
+[source]
+----
+db-orm-query-query-plan-cache-max-size=512
+----
+
+With the `-<datasource>` suffix, such as `db-orm-query-query-plan-cache-max-size-user-store`, the option applies to the persistence unit of an additional datasource that is <<persistence-unit-options,defined with options>>.
+
+The following Hibernate ORM options are available:
+
+* `db-orm-query-query-plan-cache-max-size` (build time): The maximum size of the Hibernate ORM query plan cache. Defaults to 2048.
+
 [[multiple-datasources]]
 == Configure multiple datasources
 
