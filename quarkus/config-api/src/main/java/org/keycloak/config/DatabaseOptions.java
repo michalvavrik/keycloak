@@ -174,6 +174,30 @@ public class DatabaseOptions {
             .buildTime(true)
             .build();
 
+    public static final Option<String> DB_JPA_PACKAGES = new OptionBuilder<>("db-jpa-packages-<datasource>", String.class)
+            .category(OptionCategory.DATABASE_DATASOURCES)
+            .description("Defines a persistence unit for the named <datasource> without a persistence.xml file: a comma-separated list of "
+                    + "the packages of the JPA entities it manages. The persistence unit has the same name as the datasource, "
+                    + "and the database options of the datasource such as 'db-dialect-<datasource>' apply to it.")
+            .buildTime(true)
+            .build();
+
+    /**
+     * Quarkus Hibernate ORM properties exposed as options: the {@code db-orm-} prefix followed by the Quarkus property without
+     * its {@code quarkus.hibernate-orm.} prefix, with the dots replaced by dashes. Whether such an option is a build time option
+     * follows the Quarkus property. Like the other database options, they apply to the main persistence unit, and with the
+     * {@code -<datasource>} suffix to the persistence unit that {@code db-jpa-packages-<datasource>} defines.
+     * <p>
+     * The Hibernate ORM properties are too many for the command line: these options are not command line options, they are
+     * set through the other configuration sources, such as the environment variables or the configuration file.
+     */
+    public static final Option<Integer> DB_ORM_QUERY_PLAN_CACHE_MAX_SIZE = new OptionBuilder<>("db-orm-query-query-plan-cache-max-size", Integer.class)
+            .category(OptionCategory.DATABASE)
+            .description("The maximum size of the Hibernate ORM query plan cache. Defaults to 2048.")
+            .buildTime(true)
+            .cli(false)
+            .build();
+
     public static class Datasources {
 
         /**

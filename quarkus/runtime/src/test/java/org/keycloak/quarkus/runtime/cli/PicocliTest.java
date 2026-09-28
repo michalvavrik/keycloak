@@ -177,6 +177,49 @@ public class PicocliTest extends AbstractConfigurationTest {
     }
 
     @Test
+    public void testHibernateOrmOptionCannotBeSetOnCommandLine() {
+        // the Hibernate ORM options (db-orm-*) are set through the other configuration sources, see Option#isCli
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev", "--db-orm-query-query-plan-cache-max-size=512");
+        assertError(nonRunningPicocli, "Option: '--db-orm-query-query-plan-cache-max-size' cannot be set on the command line. "
+                + "Set it with the environment variable 'KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE' or as 'db-orm-query-query-plan-cache-max-size' in the configuration file instead.");
+        assertThat(nonRunningPicocli.getErrString(), not(containsString("Possible solutions")));
+
+        // also with the datasource suffix, and for the build command
+        onAfter();
+        nonRunningPicocli = pseudoLaunch("build", "--db-orm-query-query-plan-cache-max-size-my-store=512");
+        assertError(nonRunningPicocli, "Option: '--db-orm-query-query-plan-cache-max-size-my-store' cannot be set on the command line. "
+                + "Set it with the environment variable 'KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE_MY_STORE' or as 'db-orm-query-query-plan-cache-max-size-my-store' in the configuration file instead.");
+
+        // also without a value
+        onAfter();
+        nonRunningPicocli = pseudoLaunch("start-dev", "--db-orm-query-query-plan-cache-max-size");
+        assertError(nonRunningPicocli, "Option: '--db-orm-query-query-plan-cache-max-size' cannot be set on the command line.");
+
+        // the option is not a command line option, so it is not in the help either
+        onAfter();
+        nonRunningPicocli = pseudoLaunch("start", "--help-all");
+        assertEquals(CommandLine.ExitCode.OK, nonRunningPicocli.exitCode);
+        assertThat(nonRunningPicocli.getOutString(), containsString("--db-schema"));
+        assertThat(nonRunningPicocli.getOutString(), not(containsString("db-orm-")));
+    }
+
+    @Test
+    public void testHibernateOrmOptionFromEnvironmentVariable() {
+        putEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "512");
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("build", "--db=dev-file");
+        assertNoError(nonRunningPicocli);
+        // a build time option, persisted with the build
+        assertEquals("512", nonRunningPicocli.getBuildProps().getProperty("kc.db-orm-query-query-plan-cache-max-size"));
+        assertEquals("512", nonRunningPicocli.config.getConfigValue("quarkus.hibernate-orm.query.query-plan-cache-max-size").getValue());
+
+        // validated like any other option
+        onAfter();
+        putEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "many");
+        nonRunningPicocli = pseudoLaunch("build", "--db=dev-file");
+        assertError(nonRunningPicocli, "Invalid value for option 'KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE'");
+    }
+
+    @Test
     public void testTrustStorePasswordRequiredForPkcs12() {
         putEnvVar("KC_HTTPS_TRUST_STORE_FILE", "truststore.p12");
         NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
