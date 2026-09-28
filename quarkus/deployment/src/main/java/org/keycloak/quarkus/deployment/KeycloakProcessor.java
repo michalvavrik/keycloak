@@ -208,6 +208,7 @@ import static org.keycloak.quarkus.runtime.Providers.getProviderManager;
 import static org.keycloak.quarkus.runtime.configuration.Configuration.getOptionalValue;
 import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
 import static org.keycloak.quarkus.runtime.logging.KeycloakLogFilter.collectAllDefaultUnsupportedHibernateProperties;
+import static org.keycloak.quarkus.runtime.logging.KeycloakLogFilter.collectNamedUnitUnsupportedHibernateProperties;
 import static org.keycloak.representations.provider.ScriptProviderDescriptor.AUTHENTICATORS;
 import static org.keycloak.representations.provider.ScriptProviderDescriptor.MAPPERS;
 import static org.keycloak.representations.provider.ScriptProviderDescriptor.POLICIES;
@@ -940,7 +941,7 @@ class KeycloakProcessor {
     @Record(ExecutionTime.STATIC_INIT)
     @BuildStep
     void prepareKeycloakLogFilter(KeycloakRecorder recorder) {
-        recorder.setHibernateUnsupportedProperties(collectAllDefaultUnsupportedHibernateProperties());
+        recorder.setHibernateUnsupportedProperties(collectAllDefaultUnsupportedHibernateProperties(), collectNamedUnitUnsupportedHibernateProperties());
     }
 
     @BuildStep

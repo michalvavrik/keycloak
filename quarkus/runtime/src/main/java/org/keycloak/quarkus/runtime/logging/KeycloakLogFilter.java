@@ -125,6 +125,10 @@ public abstract class KeycloakLogFilter implements Filter {
         KeycloakLogFilter.keycloakDefaultUnsupportedProperties = Set.copyOf(keycloakDefaultUnsupportedProperties);
     }
 
+    public static void setKeycloakNamedUnitUnsupportedProperties(Set<String> keycloakNamedUnitUnsupportedProperties) {
+        KeycloakLogFilter.keycloakNamedUnitUnsupportedProperties = Set.copyOf(keycloakNamedUnitUnsupportedProperties);
+    }
+
     protected abstract Class<? extends Handler> getHandlerClass();
 
     /**
