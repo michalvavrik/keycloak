@@ -28,6 +28,7 @@ import jakarta.annotation.Priority;
 
 import org.keycloak.config.OptionCategory;
 import org.keycloak.quarkus.runtime.Environment;
+import org.keycloak.quarkus.runtime.configuration.mappers.DatabasePropertyMappers;
 import org.keycloak.quarkus.runtime.configuration.mappers.PropertyMapper;
 import org.keycloak.quarkus.runtime.configuration.mappers.PropertyMappers;
 import org.keycloak.quarkus.runtime.configuration.mappers.WildcardPropertyMapper;
@@ -213,13 +214,13 @@ public class PropertyMappingInterceptor implements ConfigSourceInterceptor {
 
     private boolean hasValue(String key, ConfigSourceInterceptorContext context) {
         try {
-            if (PropertyMappers.isHibernateUnsupportedProperty(key) && isAugmentation()) {
+            if (DatabasePropertyMappers.isHibernateUnsupportedProperty(key) && isAugmentation()) {
                 // Keycloak contributes Hibernate ORM unsupported properties from runtime options only. Advertising
                 // such a map key during augmentation would record the option's value into the build, and Quarkus
                 // then applies it regardless of the option at runtime.
                 return false;
             }
-            if (PropertyMappers.isNamedPersistenceUnitProperty(key)) {
+            if (DatabasePropertyMappers.isNamedPersistenceUnitProperty(key)) {
                 // Quarkus defines a persistence unit for every name it finds a property of, so a property of a named
                 // persistence unit is advertised only when Keycloak provides its value, that is a set option, a Keycloak
                 // default or a value derived from another option (see DatabasePropertyMappers.Datasources), or when the

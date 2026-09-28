@@ -869,19 +869,23 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
     }
 
     @Test
-    public void namedDatasourceHibernatePropertiesRequirePersistenceUnit() {
+    public void namedDatasourceHibernatePropertiesNotMappedWithoutConfiguredPersistenceUnit() {
         ConfigArgsConfigSource.setCliArgs("--db-kind-my-store=mariadb", "--db-debug-jpql-my-store=true",
                 "--db-log-slow-queries-threshold-my-store=5000", "--db-schema-my-store=other");
         initConfig();
 
-        // the datasource options are resolved as usual
+        // the datasource options are resolved as usual, and some of them always have a value: the dialect is derived
+        // from the kind, and the slow query threshold has a default
         assertConfig(Map.of(
                 "db-dialect-my-store", MariaDBDialect.class.getName(),
                 "db-debug-jpql-my-store", "true",
                 "db-log-slow-queries-threshold-my-store", "5000",
                 "db-schema-my-store", "other"));
 
-        // but they do not configure a persistence unit, because db-jpa-packages-my-store does not define one
+        // Quarkus defines a persistence unit for every name it finds a quarkus.hibernate-orm property of, so none of the
+        // options is mapped unless db-jpa-packages-my-store defines the persistence unit of the datasource: the values
+        // that are always present must not define a unit for every named datasource, and a persistence unit defined by
+        // a persistence.xml applies the options through KeycloakProcessor#getUserPersistenceUnitOverrides instead
         assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".packages");
         assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".datasource");
         assertExternalConfigNull("quarkus.hibernate-orm.\"my-store\".dialect");

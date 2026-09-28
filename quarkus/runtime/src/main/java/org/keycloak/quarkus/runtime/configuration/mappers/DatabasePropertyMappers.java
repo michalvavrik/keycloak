@@ -14,6 +14,7 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -71,6 +72,7 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
     public static final String ORACLEDB_CONNECT_TIMEOUT = "quarkus.datasource.jdbc.additional-jdbc-properties.oracle.net.CONNECT_TIMEOUT";
     public static final String ORACLEDB_CONNECTION_PROPERTIES = "quarkus.datasource.jdbc.additional-jdbc-properties.ConnectionProperties";
     public static final String MSSQL_CONNECT_TIMEOUT = "quarkus.datasource.jdbc.additional-jdbc-properties.loginTimeout";
+    private static final String QUARKUS_HIBERNATE_ORM_PREFIX = "quarkus.hibernate-orm.";
     private static final String ORACLE_NET_CONNECT_TIMEOUT = "oracle.net.CONNECT_TIMEOUT";
     public static final String JDBC_LOGIN_TIMEOUT = "quarkus.datasource.jdbc.login-timeout";
     public static final String JDBC_ACQUISITION_TIMEOUT = "quarkus.datasource.jdbc.acquisition-timeout";
@@ -258,7 +260,7 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
         // exposed as db-orm-* options (see DatabaseOptions#DB_ORM_QUERY_PLAN_CACHE_MAX_SIZE). Named datasources get the
         // same mappers (e.g. db-dialect-<datasource>), targeting the persistence unit that db-jpa-packages-<datasource>
         // defines for the datasource, see Datasources#appendDatasourceMappers.
-        List<PropertyMapper<?>> hibernateOrmMappers = List.of(
+        List<PropertyMapper<?>> persistenceUnitMappers = List.of(
                 fromOption(DatabaseOptions.DB_DIALECT)
                         .mapFrom(DatabaseOptions.DB_DIALECT)
                         .to("quarkus.hibernate-orm.dialect")
@@ -282,8 +284,7 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                         .build()
         );
 
-        List<PropertyMapper<?>> result = appendDatasourceMappers(
-                Stream.concat(allSourceMappers.stream(), hibernateOrmMappers.stream()).toList(), Map.of(
+        List<PropertyMapper<?>> result = appendDatasourceMappers(allSourceMappers, persistenceUnitMappers, Map.of(
                 // Inherit options from the DB mappers
                 DB_POOL_INITIAL_SIZE, mapper -> mapper.mapFrom(DB_POOL_INITIAL_SIZE),
                 DB_POOL_MAX_SIZE, mapper -> mapper.mapFrom(DB_POOL_MAX_SIZE)
@@ -607,83 +608,111 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
         };
     }
 
+    /**
+     * Whether the name is a key of the {@code unsupported-properties} map of a Hibernate ORM persistence unit
+     * (e.g. {@code quarkus.hibernate-orm."<unit>".unsupported-properties."hibernate.use_sql_comments"}).
+     * Keycloak only contributes such keys from runtime options.
+     */
+    public static boolean isHibernateUnsupportedProperty(String name) {
+        return name.startsWith(QUARKUS_HIBERNATE_ORM_PREFIX) && name.contains(".unsupported-properties.");
+    }
+
+    /**
+     * Whether the name is a property of a named Hibernate ORM persistence unit, e.g.
+     * {@code quarkus.hibernate-orm."<unit>".dialect}.
+     */
+    public static boolean isNamedPersistenceUnitProperty(String name) {
+        return name.startsWith(QUARKUS_HIBERNATE_ORM_PREFIX + "\"");
+    }
+
     public static final class Datasources extends org.keycloak.config.DatabaseOptions.Datasources {
 
         /**
          * Automatically create mappers for datasource options
+         *
+         * @param persistenceUnitMappers the mappers of the Hibernate ORM configuration of the persistence unit: for a
+         *        named datasource, they target the persistence unit that {@code db-jpa-packages-<datasource>} defines,
+         *        see {@link #forConfiguredPersistenceUnit}
          */
-        static List<PropertyMapper<?>> appendDatasourceMappers(List<PropertyMapper<?>> mappers, Map<Option<?>, Consumer<PropertyMapper.Builder<?>>> transformDatasourceMappers) {
-            List<PropertyMapper<?>> datasourceMappers = new ArrayList<>(mappers.size() * 2);
+        static List<PropertyMapper<?>> appendDatasourceMappers(List<PropertyMapper<?>> mappers, List<PropertyMapper<?>> persistenceUnitMappers,
+                Map<Option<?>, Consumer<PropertyMapper.Builder<?>>> transformDatasourceMappers) {
+            List<PropertyMapper<?>> allMappers = Stream.concat(mappers.stream(), persistenceUnitMappers.stream()).toList();
+            List<PropertyMapper<?>> datasourceMappers = new ArrayList<>(allMappers.size() * 2);
 
             Map<String, Option<?>> cachedDatasourceOptions = new HashMap<>();
             cachedDatasourceOptions.put(DB.getKey(), DB_KIND);
-            mappers.stream().map(PropertyMapper::getOption).forEach(o -> cachedDatasourceOptions.computeIfAbsent(o.getKey(), k -> getDatasourceOption(o)));
-            
+            allMappers.stream().map(PropertyMapper::getOption).forEach(o -> cachedDatasourceOptions.computeIfAbsent(o.getKey(), k -> getDatasourceOption(o)));
+
             for (var parent : mappers) {
-                var parentOption = parent.getOption();
-
-                var datasourceOption = cachedDatasourceOptions.get(parentOption.getKey());
-
-                var transformedTo = transformDatasourceTo(parent.getTo());
-                boolean persistenceUnitProperty = transformedTo != null && transformedTo.startsWith(QUARKUS_HIBERNATE_ORM_PREFIX);
-
-                ValueMapper transformer = parent.getMapper();
-                if (persistenceUnitProperty && (transformer != null || parent.getMapFrom() == null)) {
-                    transformer = forConfiguredPersistenceUnit(transformer);
-                }
-
-                var created = fromOption(datasourceOption)
-                        .isMasked(parent.isMask())
-                        .transformer(transformer);
-
-                if (parent.getMapFrom() != null) {
-                    Option<?> mapFrom = cachedDatasourceOptions.get(parent.getMapFrom());
-                    if (mapFrom == null) {
-                        throw new IllegalArgumentException("Option '%s' in mapFrom() method for mapper '%s' does not have any associated wildcard option".formatted(parent.getMapFrom(), datasourceOption.getKey()));
-                    }
-                    ValueMapper parentMapper = parent.getParentMapper() != null ? (name, value, context) -> parent.getParentMapper().map(name, value, context) : null;
-                    if (persistenceUnitProperty) {
-                        parentMapper = forConfiguredPersistenceUnit(parentMapper);
-                    }
-                    created.wildcardMapFrom(mapFrom, parentMapper);
-                }
-
-                if (parent.getParamLabel() != null) {
-                    created.paramLabel(parent.getParamLabel());
-                }
-
-                if (transformedTo != null) {
-                    created.to(transformedTo);
-                }
-
-                var customTransformer = transformDatasourceMappers.get(parent.getOption());
-                if (customTransformer != null) {
-                    customTransformer.accept(created);
-                }
-
-                Option<String> primaryOption = DB_KIND;
-
-                PropertyMapper<?> mapper = created.build();
-                // if we're not the DB option, nor mapped directly from the DB option, then
-                // it's considered "connected" for the purposes of discovery
-                if (parentOption != DB && !primaryOption.getKey().equals(mapper.getMapFrom())) {
-                    primaryOption.getConnectedOptions().add(mapper.getOption().getKey());
-                }
-                datasourceMappers.add(mapper);
+                datasourceMappers.add(createDatasourceMapper(parent, transformDatasourceTo(parent.getTo()), UnaryOperator.identity(),
+                        cachedDatasourceOptions, transformDatasourceMappers));
+            }
+            for (var parent : persistenceUnitMappers) {
+                datasourceMappers.add(createDatasourceMapper(parent, transformPersistenceUnitTo(parent.getTo()), Datasources::forConfiguredPersistenceUnit,
+                        cachedDatasourceOptions, transformDatasourceMappers));
             }
 
-            datasourceMappers.addAll(mappers);
+            datasourceMappers.addAll(allMappers);
 
             return datasourceMappers;
         }
 
-        private static final String QUARKUS_HIBERNATE_ORM_PREFIX = "quarkus.hibernate-orm.";
+        /**
+         * @param to the property the datasource mapper maps to
+         * @param valueMappers applied to the value mappers of the parent, the transformer and the one of mapFrom, to
+         *        obtain the value mappers of the datasource mapper. Called with {@code null} for a value mapper the
+         *        parent does not have.
+         */
+        private static PropertyMapper<?> createDatasourceMapper(PropertyMapper<?> parent, String to, UnaryOperator<ValueMapper> valueMappers,
+                Map<String, Option<?>> cachedDatasourceOptions, Map<Option<?>, Consumer<PropertyMapper.Builder<?>>> transformDatasourceMappers) {
+            var parentOption = parent.getOption();
+
+            var datasourceOption = cachedDatasourceOptions.get(parentOption.getKey());
+
+            var created = fromOption(datasourceOption)
+                    .isMasked(parent.isMask())
+                    .transformer(valueMappers.apply(parent.getMapper()));
+
+            if (parent.getMapFrom() != null) {
+                Option<?> mapFrom = cachedDatasourceOptions.get(parent.getMapFrom());
+                if (mapFrom == null) {
+                    throw new IllegalArgumentException("Option '%s' in mapFrom() method for mapper '%s' does not have any associated wildcard option".formatted(parent.getMapFrom(), datasourceOption.getKey()));
+                }
+                ValueMapper parentMapper = parent.getParentMapper() != null ? (name, value, context) -> parent.getParentMapper().map(name, value, context) : null;
+                created.wildcardMapFrom(mapFrom, valueMappers.apply(parentMapper));
+            }
+
+            if (parent.getParamLabel() != null) {
+                created.paramLabel(parent.getParamLabel());
+            }
+
+            if (to != null) {
+                created.to(to);
+            }
+
+            var customTransformer = transformDatasourceMappers.get(parent.getOption());
+            if (customTransformer != null) {
+                customTransformer.accept(created);
+            }
+
+            Option<String> primaryOption = DB_KIND;
+
+            PropertyMapper<?> mapper = created.build();
+            // if we're not the DB option, nor mapped directly from the DB option, then
+            // it's considered "connected" for the purposes of discovery
+            if (parentOption != DB && !primaryOption.getKey().equals(mapper.getMapFrom())) {
+                primaryOption.getConnectedOptions().add(mapper.getOption().getKey());
+            }
+            return mapper;
+        }
 
         /**
          * Hibernate ORM properties of a named datasource configure the persistence unit named after the datasource,
          * which exists only when {@code db-jpa-packages-<datasource>} defines it. Otherwise the property must stay
          * unset: any build time {@code quarkus.hibernate-orm."<datasource>".*} value makes Quarkus define a persistence
          * unit of that name, which fails without packages and clashes with a persistence.xml unit of the same name.
+         *
+         * @param mapper the value mapper of the parent, or {@code null} to map the value as is
          */
         private static ValueMapper forConfiguredPersistenceUnit(ValueMapper mapper) {
             return (datasource, value, context) -> {
@@ -707,14 +736,22 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
 
             if (to.startsWith("quarkus.datasource.")) {
                 return to.replaceFirst("quarkus\\.datasource\\.", "quarkus.datasource.\"<datasource>\".");
-            } else if (to.startsWith(QUARKUS_HIBERNATE_ORM_PREFIX)) {
-                return to.replaceFirst("quarkus\\.hibernate-orm\\.", "quarkus.hibernate-orm.\"<datasource>\".");
             } else if (to.startsWith("kc.db-")) {
                 return to.concat("-<datasource>");
             } else {
                 log.warnf("Cannot determine how to map datasource option to '%s'", to);
             }
             return to;
+        }
+
+        /**
+         * The property of the persistence unit of the named datasource, see {@link #forConfiguredPersistenceUnit}
+         */
+        private static String transformPersistenceUnitTo(String to) {
+            if (to == null || !to.startsWith(QUARKUS_HIBERNATE_ORM_PREFIX)) {
+                throw new IllegalArgumentException("A persistence unit mapper must map to a '%s' property, but it maps to '%s'".formatted(QUARKUS_HIBERNATE_ORM_PREFIX, to));
+            }
+            return QUARKUS_HIBERNATE_ORM_PREFIX + "\"<datasource>\"." + to.substring(QUARKUS_HIBERNATE_ORM_PREFIX.length());
         }
     }
 

@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A persistence unit defined through {@code db-jpa-packages-<datasource>} instead of a persistence.xml.
+ * A persistence unit defined through {@code db-jpa-packages-<datasource>}.
  */
 @DistributionTest(stopServer = Mode.MANUAL)
 @RawDistOnly(reason = "Containers are immutable")

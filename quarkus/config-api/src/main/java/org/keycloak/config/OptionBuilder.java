@@ -76,9 +76,6 @@ public class OptionBuilder<T> {
         return this;
     }
 
-    /**
-     * For more details, see the {@link Option#isCli()}
-     */
     public OptionBuilder<T> cli(boolean cli) {
         this.cli = cli;
         return this;
