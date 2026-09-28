@@ -176,7 +176,7 @@ public class DatabaseOptions {
 
     public static final Option<String> DB_JPA_PACKAGES = new OptionBuilder<>("db-jpa-packages-<datasource>", String.class)
             .category(OptionCategory.DATABASE_DATASOURCES)
-            .description("Defines a persistence unit for the named <datasource> without a persistence.xml file: a comma-separated list of "
+            .description("Defines a persistence unit for the named <datasource>: a comma-separated list of "
                     + "the packages of the JPA entities it manages. The persistence unit has the same name as the datasource, "
                     + "and the database options of the datasource such as 'db-dialect-<datasource>' apply to it.")
             .buildTime(true)
