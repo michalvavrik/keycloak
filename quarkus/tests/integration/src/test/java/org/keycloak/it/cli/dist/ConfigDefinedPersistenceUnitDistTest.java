@@ -143,15 +143,14 @@ public class ConfigDefinedPersistenceUnitDistTest {
 
     @Test
     void hibernateOrmOptions(KeycloakRunner runner, RawDistRootPath dist) throws IOException {
-        // the Hibernate ORM options (db-orm-*) cannot be set on the command line, and they are not in the help
+        // db-orm-* options cannot be set on the command line and are not in the help
         CLIResult result = runner.run(concat(BUILD, "--db-orm-query-query-plan-cache-max-size-my-store=256"));
         result.assertError("Option: '--db-orm-query-query-plan-cache-max-size-my-store' cannot be set on the command line. "
                 + "Set it with the environment variable 'KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE_MY_STORE' or as 'db-orm-query-query-plan-cache-max-size-my-store' in the configuration file instead.");
         result = runner.run("start", "--help-all");
         result.assertNoMessageGiven("--db-schema", "db-orm-");
 
-        // the Hibernate ORM properties are collected from the Quarkus extension when Keycloak is built, and shipped in the
-        // server jar: the command line cannot load the build time configuration of the extension itself
+        // the properties generated into the server jar
         runner.run(BUILD).assertBuild();
         Map<String, String> recorded = generatedHibernateOrmProperties(dist.getDistRootPath());
         assertEquals("build-time,unit,integer", recorded.get("quarkus.hibernate-orm.query.query-plan-cache-max-size"));
@@ -159,7 +158,7 @@ public class ConfigDefinedPersistenceUnitDistTest {
         assertEquals("build-time,global,boolean", recorded.get("quarkus.hibernate-orm.enabled"));
         assertFalse(recorded.containsKey("quarkus.hibernate-orm.unsupported-properties.*"), recorded.toString());
 
-        // the options are set through the other configuration sources: the environment variables and the configuration file
+        // set through environment variables and the configuration file
         RawKeycloakDistribution rawDist = runner.getDistribution(RawKeycloakDistribution.class);
         runner.setEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "512"); // a build time option
         runner.setEnvVar("KC_DB_ORM_LOG_SQL", "true"); // a run time option
@@ -167,21 +166,21 @@ public class ConfigDefinedPersistenceUnitDistTest {
         rawDist.setProperty("db-orm-log-sql-my-store", "true");
         rawDist.setProperty("db-orm-log-format-sql-my-store", "false"); // the Quarkus default is true
         try {
-            // the build time option set after the build is recognized on start, which updates the server image
+            // a build time option set after the build triggers a rebuild on start
             result = runner.run(START_AUTO_BUILD);
             result.assertMessage("Changes detected in configuration. Updating the server image.");
             result.assertStarted();
             assertUnitDefined(result);
             assertEquals("512", settings("default").get("hibernate.query.plan_cache_max_size"));
             assertEquals("256", settings(UNIT).get("hibernate.query.plan_cache_max_size"));
-            // Quarkus applies the log settings when the SQL is logged, with its default for the unset format option
+            // Quarkus applies the format setting only when SQL logging is on; its default is true
             assertEquals("true", settings("default").get("hibernate.show_sql"));
             assertEquals("true", settings("default").get("hibernate.format_sql"));
             assertEquals("true", settings(UNIT).get("hibernate.show_sql"));
             assertNull(settings(UNIT).get("hibernate.format_sql"));
             runner.stop();
 
-            // a run time option changes without a rebuild: Quarkus does not set the Hibernate property when the SQL is not logged
+            // a run time option changes without a rebuild; Quarkus does not set show_sql when false
             runner.setEnvVar("KC_DB_ORM_LOG_SQL", "false");
             result = runner.run(START);
             result.assertStarted();
@@ -191,12 +190,12 @@ public class ConfigDefinedPersistenceUnitDistTest {
             assertEquals("512", settings("default").get("hibernate.query.plan_cache_max_size"));
             runner.stop();
 
-            // whereas a changed build time option requires a build
+            // a changed build time option requires a build
             runner.setEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "1024");
             result = runner.run(START);
             result.assertError("The following build time options have values that differ from what is persisted - the new values will NOT be used until another build is run: kc.db-orm-query-query-plan-cache-max-size");
 
-            // the value is validated according to the type of the Quarkus property
+            // validated with the type of the property
             runner.setEnvVar("KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE", "many");
             result = runner.run(BUILD);
             result.assertError("Invalid value for option 'KC_DB_ORM_QUERY_QUERY_PLAN_CACHE_MAX_SIZE'");

@@ -740,23 +740,23 @@ to be your `wait_timeout` minus a few minutes. Failure to correctly configure th
 [[hibernate-orm-options]]
 == Configuring Hibernate ORM
 
-{project_name} exposes the properties of the Quarkus Hibernate ORM extension as options with the `db-orm-` prefix.
-The name of such an option is the Quarkus property without its `quarkus.hibernate-orm.` prefix, with the dots replaced by dashes.
-For example, the option `db-orm-query-query-plan-cache-max-size` sets the Quarkus property `quarkus.hibernate-orm.query.query-plan-cache-max-size`.
-An option is a build time option when the Quarkus property is a build time property, and its value is validated according to the type of the property.
-The options have no default of their own: unless an option is set, the default of the Quarkus property applies.
+{project_name} exposes the properties of the Quarkus Hibernate ORM extension as options with the `db-orm-` prefix: the name of the option is the Quarkus property without `quarkus.hibernate-orm.`, with dots replaced by dashes.
+For example, `db-orm-query-query-plan-cache-max-size` sets `quarkus.hibernate-orm.query.query-plan-cache-max-size`.
+An option is a build time option if the Quarkus property is one.
+Boolean and numeric values are validated by {project_name}, other values by Quarkus.
+The options have no default of their own: the default of the Quarkus property applies.
 
-The available options follow from the version of Quarkus that {project_name} ships, and the descriptions of the properties are found in the https://quarkus.io/guides/hibernate-orm#hibernate-configuration-properties[configuration reference of the Quarkus Hibernate ORM extension].
+The properties and their descriptions are listed in the https://quarkus.io/guides/hibernate-orm#configuration-reference[configuration reference of the Quarkus Hibernate ORM extension] for the Quarkus version that {project_name} ships.
 The following properties have no `db-orm-` option:
 
-* The properties that are set with a dedicated option of {project_name}: `db-dialect` sets `quarkus.hibernate-orm.dialect`, `db-schema` sets `quarkus.hibernate-orm.database.default-schema`, and `db-log-slow-queries-threshold` sets `quarkus.hibernate-orm.log.queries-slower-than-ms`.
-* The properties that {project_name} configures itself, such as the packages of the JPA entities in `quarkus.hibernate-orm.packages`.
-* The properties without a fixed name, such as `quarkus.hibernate-orm.unsupported-properties."<property>"`.
-* The properties that Quarkus deprecated.
+* Properties set by a dedicated option: `db-dialect`, `db-schema` and `db-log-slow-queries-threshold`.
+* Properties that {project_name} configures itself, such as `quarkus.hibernate-orm.packages`, and properties that {project_name} cannot work with, such as `quarkus.hibernate-orm.enabled`, `quarkus.hibernate-orm.multitenant` and `quarkus.hibernate-orm.schema-management.strategy`.
+* Properties without a fixed name, such as `quarkus.hibernate-orm.unsupported-properties."<property>"`.
+* Deprecated properties.
 
-WARNING: {project_name} is tested with the default values of these properties, and it relies on some of them. Consult the Quarkus documentation before changing a property.
+WARNING: {project_name} is tested with the defaults of these properties and relies on some of them. Consult the Quarkus documentation before changing one.
 
-The Hibernate ORM properties are too many for the command line, so these options are not available as command-line parameters, and they are not listed in the command-line help, in the shell completion, or in the <@links.server id="all-config"/> guide.
+The options are not available on the command line, and they are not listed in the command-line help, the shell completion or the <@links.server id="all-config"/> guide.
 Set them through the other configuration sources described in <@links.server id="configuration"/>, for example as an environment variable:
 
 [source,bash]
@@ -772,8 +772,8 @@ db-orm-query-query-plan-cache-max-size=512
 ----
 
 With the `-<datasource>` suffix, such as `db-orm-query-query-plan-cache-max-size-user-store`, an option applies to the persistence unit of an additional datasource that is <<persistence-unit-options,defined with options>>.
-It does not apply to a persistence unit that a `persistence.xml` file defines: such a unit is configured in the `persistence.xml` file.
-The properties of the Hibernate ORM extension as a whole, such as `quarkus.hibernate-orm.metrics.enabled`, apply to all the persistence units and have no `-<datasource>` variant.
+Setting such an option for a datasource whose persistence unit is not defined with `db-jpa-packages-<datasource>`, for example a unit defined in a `persistence.xml` file, fails the validation of the configuration.
+Properties of the extension as a whole, such as `quarkus.hibernate-orm.metrics.enabled`, have no `-<datasource>` variant.
 
 [[multiple-datasources]]
 == Configure multiple datasources
@@ -803,8 +803,7 @@ See the Relevant options chapter for the complete list of them.
 The `persistence.xml` provides configuration for Jakarta Persistence API (JPA) such as what entities it should manage, the datasource name, JDBC settings, JPA/Hibernate custom settings, and more.
 The file needs to be placed in the `META-INF/persistence.xml` folder of your custom {project_name} extension.
 
-NOTE: Be aware that Quarkus provides the ability to set up the JPA persistence unit via Hibernate ORM properties instead of using the `persistence.xml` file.
-However, the supported way for {project_name} is using the `persistence.xml` file, and if the file is present, the Quarkus properties are ignored.
+NOTE: {project_name} reads `persistence.xml` files itself. A persistence unit can also be defined with `db-jpa-packages-<datasource>`, see <<persistence-unit-options,Defining the persistence unit with options>>.
 
 In {project_name}, most of the configuration is automatic, and you just need to provide fundamental configuration details - the datasource name and transaction type.
 
@@ -868,8 +867,8 @@ NOTE: JPA entities of an extension that are not managed by any additional persis
 
 The Hibernate ORM settings of the persistence unit are set with the `db-orm-*-<datasource>` options described in <<hibernate-orm-options,Configuring Hibernate ORM>>.
 Hibernate ORM settings that have no {project_name} option can be set with the raw Quarkus properties in `conf/quarkus.properties`, which is **unsupported** as described in the guide <@links.server id="configuration"/>.
-{project_name} maps its options to the Quarkus properties with the quoted datasource name, so a raw property that complements the options must use the same form, for example `quarkus.hibernate-orm."user-store".log.sql=true`.
-A {project_name} option always takes precedence over the corresponding raw Quarkus property.
+{project_name} maps its options to the Quarkus properties with the quoted datasource name, so a raw property that complements the options must use the same form, for example `quarkus.hibernate-orm."user-store".unsupported-properties."hibernate.jdbc.fetch_size"=100`.
+A {project_name} option that is set takes precedence over the corresponding raw Quarkus property.
 
 WARNING: Quarkus reads the configuration of a persistence unit, or of a datasource, in one form only: either with the quoted name or with the unquoted name, whichever it encounters first.
 Combining the {project_name} options of a datasource, which use the quoted form, with raw properties in the unquoted form therefore silently ignores one of them.
@@ -902,6 +901,7 @@ export KCKEY_USER_STORE_DB_KIND=db-kind-user_store$marketing
 
 You can find more information in the guide <@links.server id="configuration"/>, in subsection _Formats for environment variable keys with special characters_.
 
+[[_backward_compatibility_for_the_quarkus_properties]]
 === Backward compatibility for the `quarkus.properties`
 In the past, we instructed users to use raw Quarkus properties to configure additional datasources in some places.
 However, as using Quarkus properties in the `conf/quarkus.properties` file is considered **unsupported**, it is strongly recommended to use the dedicated additional datasources options as described above.

@@ -124,7 +124,6 @@ public class PersistenceUnitPropertiesMappingTest {
                     .option("db-pool-max-lifetime", "30s")
                     .option("db-pool-acquisition-timeout", "30s")
                     .option("db-connect-timeout", "20s")
-                    .option("db-schema", "public")
                     
                     // Named Datasource (doesn't create a PU, but maps config)
                     .option("db-kind-my-store", "dev-mem")

@@ -221,7 +221,7 @@ public class PicocliTest extends AbstractConfigurationTest {
 
     @Test
     public void testHibernateOrmRunTimeOption() {
-        // a run time Hibernate ORM property, collected from the extension on the class path, is a run time option
+        // a run time Hibernate ORM property is a run time option
         putEnvVar("KC_DB_ORM_LOG_SQL", "true");
         NonRunningPicocli nonRunningPicocli = pseudoLaunch("build", "--db=dev-file");
         assertNoError(nonRunningPicocli);
@@ -235,21 +235,47 @@ public class PicocliTest extends AbstractConfigurationTest {
         assertNoError(nonRunningPicocli);
         assertEquals("true", nonRunningPicocli.config.getConfigValue("quarkus.hibernate-orm.log.sql").getValue());
 
-        // validated like any other option, with the type of the Hibernate ORM property
+        // validated with the type of the property
         onAfter();
         putEnvVar("KC_DB_ORM_LOG_SQL", "yes");
         nonRunningPicocli = pseudoLaunch("start-dev");
         assertError(nonRunningPicocli, "Invalid value for option 'KC_DB_ORM_LOG_SQL': yes. Expected values are: true, false");
 
-        // no option of a Hibernate ORM property Keycloak configures itself
+        // properties that Keycloak configures itself have no option
         onAfter();
         nonRunningPicocli = pseudoLaunch("start-dev", "--db-orm-packages=org.example");
         assertError(nonRunningPicocli, "Unknown option: '--db-orm-packages'");
     }
 
     @Test
+    public void testHibernateOrmOptionOfDatasourceRequiresPersistenceUnit() {
+        // a db-orm-*-<datasource> option applies to the persistence unit that db-jpa-packages-<datasource> defines only
+        putEnvVar("KC_DB_ORM_JDBC_STATEMENT_BATCH_SIZE_MY_STORE", "64"); // build time
+        putEnvVar("KC_DB_ORM_LOG_SQL_MY_STORE", "true"); // run time
+        NonRunningPicocli nonRunningPicocli = pseudoLaunch("build", "--db=dev-file", "--db-kind-my-store=dev-mem");
+        assertError(nonRunningPicocli, "The options 'db-orm-jdbc-statement-batch-size-my-store', 'db-orm-log-sql-my-store' apply to the persistence unit that 'db-jpa-packages-my-store' defines, which is not set.");
+
+        onAfter();
+        putEnvVar("KC_DB_ORM_LOG_SQL_MY_STORE", "true");
+        nonRunningPicocli = pseudoLaunch("start-dev", "--db-kind-my-store=dev-mem");
+        assertError(nonRunningPicocli, "The option 'db-orm-log-sql-my-store' applies to the persistence unit that 'db-jpa-packages-my-store' defines, which is not set.");
+
+        onAfter();
+        putEnvVar("KC_DB_ORM_JDBC_STATEMENT_BATCH_SIZE_MY_STORE", "64");
+        putEnvVar("KC_DB_ORM_LOG_SQL_MY_STORE", "true");
+        nonRunningPicocli = pseudoLaunch("build", "--db=dev-file", "--db-kind-my-store=dev-mem", "--db-jpa-packages-my-store=org.example");
+        assertNoError(nonRunningPicocli);
+
+        // the explicitly mapped options also apply to a persistence.xml unit, so they are not validated
+        onAfter();
+        putEnvVar("KC_DB_SCHEMA_MY_STORE", "other");
+        nonRunningPicocli = pseudoLaunch("build", "--db=dev-file", "--db-kind-my-store=dev-mem", "--db-debug-jpql-my-store=true");
+        assertNoError(nonRunningPicocli);
+    }
+
+    @Test
     public void testRawHibernateOrmPropertyIsSecondClassToItsOption() {
-        // the raw Quarkus property of the default persistence unit, and of the persistence unit that db-jpa-packages defines
+        // the raw property of the default unit and of a unit defined with db-jpa-packages
         setSystemProperty("quarkus.hibernate-orm.log.sql", "true", () -> {
             NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev");
             assertNoError(nonRunningPicocli);
@@ -262,8 +288,7 @@ public class PicocliTest extends AbstractConfigurationTest {
             assertThat(nonRunningPicocli.getOutString(), containsString("Please use the first-class option `kc.db-orm-log-sql-user-store` instead of `quarkus.hibernate-orm.\"user-store\".log.sql`"));
         });
 
-        // whereas the option of a named datasource does not apply to a persistence unit of a persistence.xml file, which is
-        // configured with the raw Quarkus properties
+        // the option of a named datasource does not apply to a persistence.xml unit
         onAfter();
         setSystemProperty("quarkus.hibernate-orm.\"user-store\".log.sql", "true", () -> {
             NonRunningPicocli nonRunningPicocli = pseudoLaunch("start-dev", "--db-kind-user-store=dev-mem");

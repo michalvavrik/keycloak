@@ -759,8 +759,8 @@
         </dependency>
 
         <dependency>
-            <!-- defines the build time Hibernate ORM properties that HibernateOrmPropertiesGenerator collects when this
-                 module is built: on the class path of the generator only, neither packaged nor inherited by the server -->
+            <!-- build time config of the Hibernate ORM extension, read by HibernateOrmPropertiesGenerator during the build:
+                 neither packaged nor inherited by the server -->
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-hibernate-orm-deployment</artifactId>
             <scope>provided</scope>
@@ -829,9 +829,7 @@
                 </configuration>
             </plugin>
             <plugin>
-                <!-- generates the Quarkus Hibernate ORM properties that Keycloak exposes as db-orm-* options into the jar,
-                     see HibernateOrmPropertiesGenerator: the build time properties are defined by the deployment module
-                     of the Hibernate ORM extension, which is not on the class path of the server -->
+                <!-- generates the Hibernate ORM properties exposed as db-orm-* options, see HibernateOrmPropertiesGenerator -->
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <executions>

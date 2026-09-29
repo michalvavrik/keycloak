@@ -183,16 +183,11 @@ public class DatabaseOptions {
             .build();
 
     /**
-     * The prefix of the options that expose the Quarkus Hibernate ORM properties, which Keycloak collects from the Hibernate
-     * ORM extension when it is built: the prefix is followed by the Quarkus property without its
-     * {@code quarkus.hibernate-orm.} prefix, with the dots replaced by dashes. For example, the option
-     * {@code db-orm-query-query-plan-cache-max-size} sets the Quarkus property {@code quarkus.hibernate-orm.query.query-plan-cache-max-size}.
-     * Whether such an option is a build time option follows the Quarkus property. Like the other database options, the options
-     * of the properties of a persistence unit apply to the main persistence unit, and with the {@code -<datasource>} suffix to
-     * the persistence unit that {@code db-jpa-packages-<datasource>} defines.
-     * <p>
-     * The Hibernate ORM properties are too many for the command line: these options are not command line options, they are
-     * set through the other configuration sources, such as the environment variables or the configuration file.
+     * Prefix of the options that expose the Quarkus Hibernate ORM properties: the property name without
+     * {@code quarkus.hibernate-orm.}, with dots replaced by dashes. For example, {@code db-orm-query-query-plan-cache-max-size}
+     * sets {@code quarkus.hibernate-orm.query.query-plan-cache-max-size}. The build time flag follows the property. The options
+     * of a persistence unit property also exist with the {@code -<datasource>} suffix, for the unit that
+     * {@code db-jpa-packages-<datasource>} defines. The options cannot be set on the command line, see {@link Option#isCli()}.
      */
     public static final String DB_ORM_PREFIX = "db-orm-";
 

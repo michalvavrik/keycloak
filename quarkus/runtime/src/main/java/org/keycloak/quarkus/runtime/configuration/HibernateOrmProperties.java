@@ -26,12 +26,9 @@ import java.util.Properties;
 import java.util.TreeMap;
 
 /**
- * The properties of the Quarkus Hibernate ORM extension, which Keycloak exposes as {@code db-orm-*} options (see
- * {@link org.keycloak.config.DatabaseOptions#DB_ORM_PREFIX}).
- * <p>
- * The properties are collected from the extension when this module is built, and shipped in its jar as {@value #RESOURCE},
- * see {@link HibernateOrmPropertiesGenerator}: the build time properties are defined by the deployment module of the
- * extension, which is not on the class path of the server.
+ * The properties of the Quarkus Hibernate ORM extension, exposed as {@code db-orm-*} options
+ * (see {@link org.keycloak.config.DatabaseOptions#DB_ORM_PREFIX}). {@link HibernateOrmPropertiesGenerator} collects them when
+ * this module is built and writes them to {@value #RESOURCE}.
  */
 public final class HibernateOrmProperties {
 
@@ -41,8 +38,8 @@ public final class HibernateOrmProperties {
     public static final String PREFIX = "quarkus.hibernate-orm";
 
     /**
-     * The generated properties: a properties file with a line {@code <name>=<build-time|run-time>,<unit|global>,<type>} per
-     * property, where the type is one of {@code boolean}, {@code integer}, {@code long} and {@code string}.
+     * The generated properties file, one line {@code <name>=<build-time|run-time>,<unit|global>,<boolean|integer|long|string>}
+     * per property.
      */
     public static final String RESOURCE = "META-INF/keycloak-hibernate-orm.properties";
 
@@ -57,16 +54,11 @@ public final class HibernateOrmProperties {
     }
 
     /**
-     * A property of the Quarkus Hibernate ORM extension.
-     *
-     * @param name the name of the property, e.g. {@code quarkus.hibernate-orm.query.query-plan-cache-max-size}
-     * @param buildTime whether the property is a build time property, i.e. the phase of its config root is not
-     *        {@code RUN_TIME}
-     * @param perUnit whether the property is a property of a persistence unit, which applies to a named persistence unit
-     *        as {@code quarkus.hibernate-orm."<unit>".<property>}, as opposed to a property of the extension as a whole
-     *        such as {@code quarkus.hibernate-orm.enabled}
-     * @param type the type of the value as Keycloak validates it: {@link Boolean}, {@link Integer}, {@link Long} or
-     *        {@link String} for any other type, which Quarkus validates
+     * @param name e.g. {@code quarkus.hibernate-orm.query.query-plan-cache-max-size}
+     * @param buildTime whether the config root of the property is a build time root
+     * @param perUnit whether the property exists per persistence unit, as {@code quarkus.hibernate-orm."<unit>".<property>}
+     *        for a named unit, as opposed to a property of the extension such as {@code quarkus.hibernate-orm.enabled}
+     * @param type {@link Boolean}, {@link Integer} or {@link Long}, which Keycloak validates, or {@link String}
      */
     public record HibernateOrmProperty(String name, boolean buildTime, boolean perUnit, Class<?> type) {
 
@@ -87,7 +79,7 @@ public final class HibernateOrmProperties {
     }
 
     /**
-     * The properties of the Quarkus Hibernate ORM extension by name, sorted by name.
+     * The properties by name, sorted.
      */
     public static Map<String, HibernateOrmProperty> getProperties() {
         Map<String, HibernateOrmProperty> result = properties;
@@ -115,7 +107,7 @@ public final class HibernateOrmProperties {
     }
 
     /**
-     * Parses properties in the format of {@link #RESOURCE}.
+     * Parses the format of {@link #RESOURCE}.
      */
     public static Map<String, HibernateOrmProperty> parse(InputStream in) throws IOException {
         Properties properties = new Properties();

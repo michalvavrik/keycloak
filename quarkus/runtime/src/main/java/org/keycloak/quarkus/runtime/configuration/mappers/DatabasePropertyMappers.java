@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -283,7 +284,7 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                         .to("quarkus.hibernate-orm.database.default-schema")
                         .build()
         ));
-        // the Hibernate ORM properties of the extension as a whole, which have no counterpart for a named persistence unit
+        // properties of the extension as a whole have no named persistence unit variant
         List<PropertyMapper<?>> globalHibernateOrmMappers = new ArrayList<>();
         addHibernateOrmMappers(persistenceUnitMappers, globalHibernateOrmMappers);
 
@@ -354,30 +355,34 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
     }
 
     /**
-     * The Quarkus Hibernate ORM properties Keycloak configures itself, which are not exposed as {@code db-orm-*} options:
-     * Keycloak defines the entity packages and the datasource of a persistence unit (see {@code quarkus.hibernate-orm.packages}
-     * in application.properties and {@link DatabaseOptions#DB_JPA_PACKAGES}), and it processes the persistence.xml and
-     * orm.xml files of the providers itself, see {@code KeycloakProcessor}.
+     * Hibernate ORM properties, or groups of them, without a {@code db-orm-*} option: properties that Keycloak configures
+     * itself (the packages and the datasource of a persistence unit, the persistence.xml and orm.xml processing) and
+     * properties that Keycloak cannot work with (disabling Hibernate ORM or a persistence unit, multitenancy, schema
+     * management and naming strategies of the Liquibase managed schema, SQL scripts, dev mode settings).
      */
-    static final Set<String> HIBERNATE_ORM_PROPERTIES_NOT_EXPOSED = Set.of("packages", "datasource", "persistence-xml.ignore", "mapping-files");
+    static final Set<String> HIBERNATE_ORM_PROPERTIES_NOT_EXPOSED = Set.of("packages", "datasource", "persistence-xml.ignore", "mapping-files",
+            "enabled", "active", "jdbc.enabled", "reactive.enabled", "multitenant", "schema-management", "sql-load-script",
+            "physical-naming-strategy", "implicit-naming-strategy", "quote-identifiers.strategy", "dev-ui.allow-hql", "validate-in-dev-mode");
+
+    private static boolean isHibernateOrmPropertyExposed(String suffix) {
+        return HIBERNATE_ORM_PROPERTIES_NOT_EXPOSED.stream().noneMatch(excluded -> suffix.equals(excluded) || suffix.startsWith(excluded + "."));
+    }
 
     /**
-     * Adds the mappers of the {@code db-orm-*} options, see {@link DatabaseOptions#DB_ORM_PREFIX}: an option for every
-     * {@linkplain HibernateOrmProperties Quarkus Hibernate ORM property}, except for the properties Keycloak configures itself
-     * ({@link #HIBERNATE_ORM_PROPERTIES_NOT_EXPOSED}) and the properties mapped from another option, such as
-     * {@code quarkus.hibernate-orm.dialect} from {@code db-dialect}. The options have no default of their own, the Quarkus
-     * default of the property applies.
+     * Adds a {@code db-orm-*} mapper (see {@link DatabaseOptions#DB_ORM_PREFIX}) for every
+     * {@linkplain HibernateOrmProperties Hibernate ORM property}, except {@link #HIBERNATE_ORM_PROPERTIES_NOT_EXPOSED} and the
+     * properties that another option maps to, such as {@code db-dialect}. The options have no default: the Quarkus default
+     * of the property applies. The options of a named datasource are validated by {@link #validateConfig}.
      *
-     * @param persistenceUnitMappers the mappers of the properties of the default persistence unit: the mappers of the
-     *        properties of a persistence unit are added here, so that they also apply to the persistence unit of a named
-     *        datasource with the {@code -<datasource>} suffix
-     * @param globalMappers the mappers of the properties of the Hibernate ORM extension as a whole are added here
+     * @param persistenceUnitMappers receives the mappers of persistence unit properties, which also get a
+     *        {@code -<datasource>} variant
+     * @param globalMappers receives the mappers of the other properties
      */
     static void addHibernateOrmMappers(List<PropertyMapper<?>> persistenceUnitMappers, List<PropertyMapper<?>> globalMappers) {
         Set<String> mappedProperties = persistenceUnitMappers.stream().map(PropertyMapper::getTo).collect(Collectors.toSet());
         Map<String, HibernateOrmProperty> optionProperties = new HashMap<>();
         for (HibernateOrmProperty property : HibernateOrmProperties.getProperties().values()) {
-            if (mappedProperties.contains(property.name()) || HIBERNATE_ORM_PROPERTIES_NOT_EXPOSED.contains(property.suffix())) {
+            if (mappedProperties.contains(property.name()) || !isHibernateOrmPropertyExposed(property.suffix())) {
                 continue;
             }
             String key = DatabaseOptions.DB_ORM_PREFIX + property.suffix().replace('.', '-');
@@ -393,11 +398,10 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
     private static <T> PropertyMapper<T> hibernateOrmMapper(String key, Class<T> type, HibernateOrmProperty property) {
         Option<T> option = new OptionBuilder<>(key, type)
                 .category(OptionCategory.DATABASE)
-                .description("Sets the Quarkus Hibernate ORM property '%s', see the configuration reference of the Quarkus Hibernate ORM extension for its description."
-                        .formatted(property.name()))
+                .description("Sets the Quarkus Hibernate ORM property '%s'.".formatted(property.name()))
                 .buildTime(property.buildTime())
                 .cli(false)
-                .defaultValue(Optional.empty()) // the Quarkus default applies, also to a Boolean option
+                .defaultValue(Optional.empty()) // no default, not even for a Boolean option
                 .build();
         return fromOption(option)
                 .to(property.name())
@@ -431,6 +435,7 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
 
     @Override
     public void validateConfig(Picocli picocli) {
+        validateHibernateOrmOptionsOfDatasources();
         Configuration.getOptionalIntegerValue(DB_POOL_MAX_SIZE).ifPresent(poolMaxSize -> {
             if (poolMaxSize < JDBC_PING_MIN_POOL_MAX_SIZE && isJdbcPingStack()) {
                 throw new PropertyException(
@@ -438,6 +443,41 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
                                 .formatted(DB_POOL_MAX_SIZE.getKey(), JDBC_PING_MIN_POOL_MAX_SIZE, poolMaxSize));
             }
         });
+    }
+
+    /**
+     * A {@code db-orm-*-<datasource>} option applies to the persistence unit that {@code db-jpa-packages-<datasource>}
+     * defines only, see {@link Datasources#forConfiguredPersistenceUnit}: setting it without the unit is an error.
+     */
+    private static void validateHibernateOrmOptionsOfDatasources() {
+        Map<String, Set<String>> unitless = new TreeMap<>();
+        for (String name : Configuration.getPropertyNames()) {
+            PropertyMapper<?> mapper = PropertyMappers.getMapper(name);
+            if (mapper == null || !mapper.hasWildcard() || !mapper.getOption().getKey().startsWith(DatabaseOptions.DB_ORM_PREFIX)
+                    || !name.equals(mapper.forKey(name).getFrom())) {
+                continue;
+            }
+            String datasource = ((WildcardPropertyMapper<?>) mapper).extractWildcardValue(name).orElseThrow();
+            if (!Configuration.isUserModifiable(Configuration.getConfigValue(name)) || isPersistenceUnitConfigured(datasource)) {
+                continue;
+            }
+            unitless.computeIfAbsent(datasource, d -> new TreeSet<>()).add(name.substring(NS_KEYCLOAK_PREFIX.length()));
+        }
+        if (unitless.isEmpty()) {
+            return;
+        }
+        throw new PropertyException(unitless.entrySet().stream().map(entry -> {
+            Set<String> options = entry.getValue();
+            return "The option%s %s appl%s to the persistence unit that '%s' defines, which is not set.".formatted(
+                    options.size() == 1 ? "" : "s",
+                    options.stream().map(option -> "'" + option + "'").collect(Collectors.joining(", ")),
+                    options.size() == 1 ? "ies" : "y",
+                    WildcardOptionsUtil.getWildcardNamedKey(DatabaseOptions.DB_JPA_PACKAGES.getKey(), entry.getKey()));
+        }).collect(Collectors.joining("\n")));
+    }
+
+    private static boolean isPersistenceUnitConfigured(String datasource) {
+        return Configuration.getOptionalKcValue(WildcardOptionsUtil.getWildcardNamedKey(DatabaseOptions.DB_JPA_PACKAGES.getKey(), datasource)).isPresent();
     }
 
     private static boolean isJdbcPingStack() {
@@ -682,11 +722,9 @@ public final class DatabasePropertyMappers implements PropertyMapperGrouping {
     }
 
     /**
-     * Whether the option of the mapper applies to the persistence unit that the given Quarkus property, which the mapper maps
-     * to, configures. The {@code db-orm-*} option of a named datasource configures the persistence unit that
-     * {@code db-jpa-packages-<datasource>} defines only (see {@link Datasources#forConfiguredPersistenceUnit}), whereas the
-     * property may configure the persistence unit of a persistence.xml file, to which Keycloak applies its explicitly mapped
-     * options only, see {@code KeycloakProcessor#getUserPersistenceUnitOverrides}.
+     * Whether the option of the mapper takes effect for the given Quarkus property: a {@code db-orm-*-<datasource>} option
+     * applies to the persistence unit that {@code db-jpa-packages-<datasource>} defines only, see
+     * {@link Datasources#forConfiguredPersistenceUnit}, not to a unit of a persistence.xml file.
      */
     public static boolean appliesToPersistenceUnit(PropertyMapper<?> mapper, String quarkusProperty) {
         if (!mapper.hasWildcard() || !mapper.getOption().getKey().startsWith(DatabaseOptions.DB_ORM_PREFIX)

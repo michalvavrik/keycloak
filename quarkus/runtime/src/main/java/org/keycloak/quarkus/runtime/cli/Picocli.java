@@ -286,8 +286,7 @@ public class Picocli {
                 return; // TODO: need to look for disabled Wildcard mappers
             }
             var forKey = mapper.forKey(name);
-            // a raw Quarkus property set by the user is second-class to the option mapped to it, unless the option does not
-            // apply to what the property configures
+            // a raw Quarkus property is second-class to its option, unless the option does not apply
             if (!name.equals(forKey.getFrom()) && DatabasePropertyMappers.appliesToPersistenceUnit(mapper, name)) {
                 ConfigValue value = getUnmappedValue(name);
                 if (value.getValue() != null && isUserModifiable(value)) {

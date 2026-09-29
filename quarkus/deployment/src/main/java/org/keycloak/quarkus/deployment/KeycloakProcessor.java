@@ -794,7 +794,7 @@ class KeycloakProcessor {
                 }
             }
         } catch (Exception e) {
-            logger.warnf("Failed to parse classes from standalone orm.xml at %s", ormUrl, e);
+            logger.warnf(e, "Failed to parse classes from standalone orm.xml at %s", ormUrl);
         }
     }
 
@@ -810,14 +810,17 @@ class KeycloakProcessor {
      * the computing index, but its assignment stops at the first class it cannot resolve, and it would warn that no
      * suitable persistence unit exists for them. They belong to the units of the model class.</li>
      * </ul>
-     * Classes of user persistence.xml units are left to {@link #produceUserDefinedPersistenceUnits}.
+     * Classes of user persistence.xml units are left to {@link #produceUserDefinedPersistenceUnits}; their hierarchy is
+     * assigned to their units.
      */
     @BuildStep
     void assignUnclaimedModelClasses(CombinedIndexBuildItem indexBuildItem, HibernateOrmConfig hibernateOrmConfig,
             List<AdditionalPersistenceUnitBuildItem> additionalPUs, BuildProducer<AdditionalJpaModelBuildItem> producer) {
-        Set<String> userUnitClasses = new HashSet<>();
+        Map<String, Set<String>> userUnitClasses = new HashMap<>();
         for (AdditionalPersistenceUnitBuildItem pu : additionalPUs) {
-            userUnitClasses.addAll(pu.getManagedClassNames());
+            for (String className : pu.getManagedClassNames()) {
+                userUnitClasses.computeIfAbsent(className, c -> new TreeSet<>()).add(pu.getPersistenceUnitName());
+            }
         }
 
         Map<String, Set<String>> packageRules = new HashMap<>();
@@ -842,15 +845,16 @@ class KeycloakProcessor {
 
         private final IndexView index;
         private final IndexView computingIndex;
-        private final Set<String> userUnitClasses;
+        private final Map<String, Set<String>> userUnitClasses;
         private final Map<String, Set<String>> packageRules;
         private final Map<String, Set<String>> assignments = new TreeMap<>();
 
         /**
-         * @param userUnitClasses classes managed by user persistence units, which are not assigned
+         * @param userUnitClasses the persistence units of the classes managed by user persistence units: the classes are
+         *        not assigned, their hierarchy is
          * @param packageRules the persistence units configured for each package
          */
-        JpaModelAssignment(IndexView index, IndexView computingIndex, Set<String> userUnitClasses, Map<String, Set<String>> packageRules) {
+        JpaModelAssignment(IndexView index, IndexView computingIndex, Map<String, Set<String>> userUnitClasses, Map<String, Set<String>> packageRules) {
             this.index = index;
             this.computingIndex = computingIndex;
             this.userUnitClasses = userUnitClasses;
@@ -890,7 +894,9 @@ class KeycloakProcessor {
 
         private void assignModelClass(ClassInfo modelClass) {
             String className = modelClass.name().toString();
-            if (userUnitClasses.contains(className)) {
+            if (userUnitClasses.containsKey(className)) {
+                // Quarkus assigns the class itself, not its hierarchy
+                assignHierarchy(modelClass, userUnitClasses.get(className), false);
                 return;
             }
             Set<String> units = new TreeSet<>();
@@ -917,7 +923,7 @@ class KeycloakProcessor {
             }
             for (DotName memberName : members) {
                 String name = memberName.toString();
-                if (IGNORED_MODEL_HIERARCHY_PREFIXES.stream().anyMatch(name::startsWith) || userUnitClasses.contains(name)) {
+                if (IGNORED_MODEL_HIERARCHY_PREFIXES.stream().anyMatch(name::startsWith) || userUnitClasses.containsKey(name)) {
                     continue;
                 }
                 ClassInfo member = computingIndex.getClassByName(memberName);

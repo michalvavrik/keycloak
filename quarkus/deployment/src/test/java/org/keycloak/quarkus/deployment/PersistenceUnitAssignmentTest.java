@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -37,6 +38,10 @@ public class PersistenceUnitAssignmentTest {
     }
 
     interface OtherInterface extends ModelInterface {
+    }
+
+    // implemented by a class of a user persistence unit only
+    interface UserUnitInterface {
     }
 
     @MappedSuperclass
@@ -92,7 +97,7 @@ public class PersistenceUnitAssignmentTest {
     }
 
     @Entity
-    static class XmlEntity {
+    static class XmlEntity implements UserUnitInterface {
         @Id
         String id;
     }
@@ -108,14 +113,15 @@ public class PersistenceUnitAssignmentTest {
     @BeforeAll
     static void index() throws IOException {
         plainIndex = Index.of(INDEXED);
-        Class<?>[] all = new Class<?>[INDEXED.length + 2];
+        Class<?>[] all = new Class<?>[INDEXED.length + 3];
         System.arraycopy(INDEXED, 0, all, 0, INDEXED.length);
         all[INDEXED.length] = ModelInterface.class;
         all[INDEXED.length + 1] = OtherInterface.class;
+        all[INDEXED.length + 2] = UserUnitInterface.class;
         computingIndex = Index.of(all);
     }
 
-    private static Map<String, Set<String>> assign(Set<String> userUnitClasses, Map<String, Set<String>> packageRules) {
+    private static Map<String, Set<String>> assign(Map<String, Set<String>> userUnitClasses, Map<String, Set<String>> packageRules) {
         return new KeycloakProcessor.JpaModelAssignment(plainIndex, computingIndex, userUnitClasses, packageRules).compute();
     }
 
@@ -125,7 +131,7 @@ public class PersistenceUnitAssignmentTest {
 
     @Test
     public void unclaimedModelClassesBelongToDefaultUnit() {
-        Map<String, Set<String>> assignments = assign(Set.of(), Map.of("org.keycloak.models.jpa.entities.", Set.of(DEFAULT)));
+        Map<String, Set<String>> assignments = assign(Map.of(), Map.of("org.keycloak.models.jpa.entities.", Set.of(DEFAULT)));
 
         for (Class<?> clazz : INDEXED) {
             assertEquals(Set.of(DEFAULT), assignments.get(name(clazz)), clazz.getName());
@@ -133,21 +139,24 @@ public class PersistenceUnitAssignmentTest {
         // the class hierarchy of unclaimed classes is assigned with them, java.* types excluded
         assertEquals(Set.of(DEFAULT), assignments.get(name(OtherInterface.class)));
         assertEquals(Set.of(DEFAULT), assignments.get(name(ModelInterface.class)));
-        assertEquals(INDEXED.length + 2, assignments.size(), assignments.toString());
+        assertEquals(Set.of(DEFAULT), assignments.get(name(UserUnitInterface.class)));
+        assertEquals(INDEXED.length + 3, assignments.size(), assignments.toString());
     }
 
     @Test
     public void claimedModelClassesOnlyGetUnresolvedHierarchyAssigned() {
-        Map<String, Set<String>> assignments = assign(Set.of(), Map.of(PACKAGE, Set.of(DEFAULT)));
+        Map<String, Set<String>> assignments = assign(Map.of(), Map.of(PACKAGE, Set.of(DEFAULT)));
 
-        assertEquals(Map.of(name(OtherInterface.class), Set.of(DEFAULT), name(ModelInterface.class), Set.of(DEFAULT)), assignments);
+        assertEquals(Map.of(name(OtherInterface.class), Set.of(DEFAULT), name(ModelInterface.class), Set.of(DEFAULT),
+                name(UserUnitInterface.class), Set.of(DEFAULT)), assignments);
     }
 
     @Test
     public void unresolvedHierarchyAssignedToNamedUnit() {
-        Map<String, Set<String>> assignments = assign(Set.of(), Map.of(PACKAGE, Set.of("my-store"), "org.keycloak.models.jpa.entities", Set.of(DEFAULT)));
+        Map<String, Set<String>> assignments = assign(Map.of(), Map.of(PACKAGE, Set.of("my-store"), "org.keycloak.models.jpa.entities", Set.of(DEFAULT)));
 
-        assertEquals(Map.of(name(OtherInterface.class), Set.of("my-store"), name(ModelInterface.class), Set.of("my-store")), assignments);
+        assertEquals(Map.of(name(OtherInterface.class), Set.of("my-store"), name(ModelInterface.class), Set.of("my-store"),
+                name(UserUnitInterface.class), Set.of("my-store")), assignments);
     }
 
     @Test
@@ -155,7 +164,7 @@ public class PersistenceUnitAssignmentTest {
         // a rule for a package whose name is a prefix of the test package name, but which is not a parent package, claims nothing
         String truncated = PACKAGE.substring(0, PACKAGE.length() - 4);
         assertTrue(name(ProviderEntity.class).startsWith(truncated));
-        Map<String, Set<String>> assignments = assign(Set.of(), Map.of(truncated, Set.of("my-store")));
+        Map<String, Set<String>> assignments = assign(Map.of(), Map.of(truncated, Set.of("my-store")));
 
         assertEquals(Set.of(DEFAULT), assignments.get(name(ProviderEntity.class)));
         assertFalse(assignments.values().stream().anyMatch(units -> units.contains("my-store")));
@@ -163,13 +172,23 @@ public class PersistenceUnitAssignmentTest {
 
     @Test
     public void classesOfUserPersistenceUnitsAreLeftAlone() {
-        Map<String, Set<String>> assignments = assign(Set.of(name(XmlEntity.class), name(ClaimedEntity.class), name(ModelInterface.class)), Map.of());
+        Map<String, Set<String>> assignments = assign(Map.of(name(XmlEntity.class), Set.of("xml-unit"), name(ClaimedEntity.class), Set.of("xml-unit"), name(ModelInterface.class), Set.of("xml-unit")), Map.of());
 
         assertFalse(assignments.containsKey(name(XmlEntity.class)));
         assertFalse(assignments.containsKey(name(ClaimedEntity.class)));
         assertFalse(assignments.containsKey(name(ModelInterface.class)));
         assertEquals(Set.of(DEFAULT), assignments.get(name(ProviderEntity.class)));
         assertEquals(Set.of(DEFAULT), assignments.get(name(OtherInterface.class)));
+    }
+
+    @Test
+    public void hierarchyOfUserPersistenceUnitClassesIsAssignedToTheirUnit() {
+        // Quarkus assigns the classes of a persistence.xml unit, not their hierarchy: an unassigned UserUnitInterface would
+        // be reported as a model class without a persistence unit
+        Map<String, Set<String>> assignments = assign(Map.of(name(XmlEntity.class), Set.of("xml-unit")), Map.of());
+
+        assertNull(assignments.get(name(XmlEntity.class)));
+        assertEquals(Set.of("xml-unit"), assignments.get(name(UserUnitInterface.class)));
     }
 
     @Test

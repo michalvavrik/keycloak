@@ -38,7 +38,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The properties generated into this module when it is built, see {@link HibernateOrmPropertiesGenerator}.
+ * The properties that {@link HibernateOrmPropertiesGenerator} generates into this module.
  */
 public class HibernateOrmPropertiesTest {
 
@@ -46,20 +46,20 @@ public class HibernateOrmPropertiesTest {
     public void thePropertiesAreGeneratedIntoTheModule() {
         Map<String, HibernateOrmProperty> properties = HibernateOrmProperties.getProperties();
 
-        // representative build time properties of a persistence unit, and of the extension as a whole
+        // build time properties of a persistence unit and of the extension as a whole
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.query.query-plan-cache-max-size", true, true, Integer.class), properties.get("quarkus.hibernate-orm.query.query-plan-cache-max-size"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.jdbc.statement-batch-size", true, true, Integer.class), properties.get("quarkus.hibernate-orm.jdbc.statement-batch-size"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.dialect", true, true, String.class), properties.get("quarkus.hibernate-orm.dialect"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.packages", true, true, String.class), properties.get("quarkus.hibernate-orm.packages"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.enabled", true, false, Boolean.class), properties.get("quarkus.hibernate-orm.enabled"));
-        // representative run time properties, with the types Keycloak validates: the others are validated by Quarkus
+        // run time properties, with the types that Keycloak validates
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.log.sql", false, true, Boolean.class), properties.get("quarkus.hibernate-orm.log.sql"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.log.queries-slower-than-ms", false, true, Long.class), properties.get("quarkus.hibernate-orm.log.queries-slower-than-ms"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.schema-management.strategy", false, true, String.class), properties.get("quarkus.hibernate-orm.schema-management.strategy"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.database.default-schema", false, true, String.class), properties.get("quarkus.hibernate-orm.database.default-schema"));
         assertEquals(new HibernateOrmProperty("quarkus.hibernate-orm.request-scoped.enabled", false, false, Boolean.class), properties.get("quarkus.hibernate-orm.request-scoped.enabled"));
         assertEquals("log.sql", properties.get("quarkus.hibernate-orm.log.sql").suffix());
-        // the keys of the maps have no fixed name, deprecated properties are not exposed
+        // no map keys, no deprecated properties
         assertTrue(properties.toString(), properties.keySet().stream().noneMatch(name -> name.contains("*")));
         assertThat(properties, not(hasKey("quarkus.hibernate-orm.database.generation")));
         assertThat(properties, not(hasKey("quarkus.hibernate-orm.blocking")));
@@ -70,13 +70,13 @@ public class HibernateOrmPropertiesTest {
 
     @Test
     public void theGeneratorCollectsThePropertiesOfTheExtension() {
-        // both modules of the extension are on the class path, like when the generator runs during the build
+        // both modules of the extension are on the class path, as during the build
         Map<String, HibernateOrmProperty> discovered = HibernateOrmPropertiesGenerator.discover(Thread.currentThread().getContextClassLoader());
 
         assertEquals(HibernateOrmProperties.getProperties(), discovered);
         assertTrue(discovered.toString(), discovered.values().stream().anyMatch(HibernateOrmProperty::buildTime));
         assertTrue(discovered.toString(), discovered.values().stream().anyMatch(property -> !property.buildTime()));
-        // the run time properties alone
+        // the run time root alone
         Map<String, HibernateOrmProperty> runTime = HibernateOrmPropertiesGenerator.collect(List.of(HibernateOrmRuntimeConfig.class));
         assertTrue(runTime.toString(), runTime.values().stream().noneMatch(HibernateOrmProperty::buildTime));
         assertThat(runTime, hasKey("quarkus.hibernate-orm.log.sql"));
@@ -101,7 +101,7 @@ public class HibernateOrmPropertiesTest {
                 + "quarkus.hibernate-orm.log.queries-slower-than-ms=run-time,unit,long\n"
                 + "quarkus.hibernate-orm.log.sql=run-time,unit,boolean\n"
                 + "quarkus.hibernate-orm.query.query-plan-cache-max-size=build-time,unit,integer\n", text);
-        // stable, sorted by name, regardless of the order of the properties
+        // sorted by name, independent of the input order
         Collections.reverse(all);
         assertEquals(text, new String(HibernateOrmPropertiesGenerator.serialize(all), StandardCharsets.UTF_8));
 

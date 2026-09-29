@@ -46,25 +46,17 @@ import io.smallrye.config.ConfigMappings;
 import io.smallrye.config.ConfigMappings.ConfigClass;
 
 /**
- * Generates {@value HibernateOrmProperties#RESOURCE} when this module is built, see the {@code exec-maven-plugin} execution
- * in its pom: the Quarkus Hibernate ORM properties that Keycloak exposes as {@code db-orm-*} options, read at run time by
- * {@link HibernateOrmProperties}.
- * <p>
- * The properties are collected from the config mappings of the Hibernate ORM extension: like Quarkus itself, the generator
- * looks up the config roots the extension lists in {@value #CONFIG_ROOTS} and reads their {@link ConfigRoot} and
- * {@link ConfigMapping} annotations, and SmallRye Config provides the property names of a mapping. The run time properties
- * are defined by the runtime module of the extension, a dependency of this module. The build time properties are defined by
- * the deployment module of the extension, a {@code provided} dependency of this module without its transitive dependencies:
- * on the class path of the generator only, neither packaged nor inherited by the server.
- * <p>
- * Excluded are the properties without a fixed name, that is the keys of the maps such as
- * {@code quarkus.hibernate-orm.unsupported-properties."hibernate.something"}, and the deprecated properties.
+ * Generates {@value HibernateOrmProperties#RESOURCE} when this module is built, see the {@code exec-maven-plugin} execution in
+ * the pom. Like Quarkus, it finds the config roots of the Hibernate ORM extension in {@value #CONFIG_ROOTS}, reads their
+ * {@link ConfigRoot} and {@link ConfigMapping} annotations, and lets SmallRye Config list the property names. The build time
+ * root is in the deployment module of the extension, a {@code provided} dependency of this module without transitive
+ * dependencies: it is neither packaged nor inherited by the server. Map keys such as
+ * {@code quarkus.hibernate-orm.unsupported-properties."..."} and deprecated properties are excluded.
  */
 public final class HibernateOrmPropertiesGenerator {
 
     /**
-     * The files in which the Quarkus extensions list their config roots, read by Quarkus in
-     * {@code io.quarkus.deployment.configuration.BuildTimeConfigurationReader}.
+     * The file in which a Quarkus extension lists its config roots, see {@code io.quarkus.deployment.configuration.BuildTimeConfigurationReader}.
      */
     static final String CONFIG_ROOTS = "META-INF/quarkus-config-roots.list";
 
@@ -72,7 +64,7 @@ public final class HibernateOrmPropertiesGenerator {
     }
 
     /**
-     * @param args the output directory, the root of the resources of this module
+     * @param args the output directory
      */
     public static void main(String[] args) throws IOException {
         if (args.length != 1) {
@@ -96,7 +88,7 @@ public final class HibernateOrmPropertiesGenerator {
     }
 
     /**
-     * Collects the properties of the Hibernate ORM config roots that can be loaded from the class loader.
+     * Collects the properties of the Hibernate ORM config roots loadable from the class loader.
      */
     public static Map<String, HibernateOrmProperty> discover(ClassLoader classLoader) {
         List<Class<?>> configRoots = new ArrayList<>();
@@ -108,8 +100,7 @@ public final class HibernateOrmPropertiesGenerator {
                     try {
                         configRoot = Class.forName(className, false, classLoader);
                     } catch (ClassNotFoundException | LinkageError e) {
-                        // a config root of an extension whose dependencies are not on the class path
-                        continue;
+                        continue; // a root of an extension whose dependencies are absent
                     }
                     ConfigMapping mapping = configRoot.getAnnotation(ConfigMapping.class);
                     if (mapping != null && HibernateOrmProperties.PREFIX.equals(mapping.prefix())) {
@@ -124,8 +115,8 @@ public final class HibernateOrmPropertiesGenerator {
     }
 
     /**
-     * The properties of the given Hibernate ORM config roots: interfaces annotated with {@link ConfigMapping} and
-     * {@link ConfigRoot}. A property defined by both a build time and a run time config root can be set at run time.
+     * The properties of the given config roots. A property defined by both a build time and a run time root is a run time
+     * property.
      */
     static Map<String, HibernateOrmProperty> collect(Collection<Class<?>> configRoots) {
         Map<String, HibernateOrmProperty> result = new TreeMap<>();
@@ -141,13 +132,12 @@ public final class HibernateOrmPropertiesGenerator {
                 Property property = entry.getValue();
                 if (!name.startsWith(HibernateOrmProperties.PREFIX + ".") || name.contains("*") || property.isGroup()
                         || property.getMethod().isAnnotationPresent(Deprecated.class)) {
-                    // a key of a map (quarkus.hibernate-orm.*.log.sql of a named persistence unit or
-                    // quarkus.hibernate-orm.unsupported-properties.*) or an element of a collection (quarkus.hibernate-orm.packages[*])
-                    // has no fixed name, and deprecated properties are not exposed
+                    // map keys (quarkus.hibernate-orm.*.log.sql, unsupported-properties.*) and collection elements
+                    // (packages[*]) have no fixed name
                     continue;
                 }
                 String suffix = name.substring(HibernateOrmProperties.PREFIX.length() + 1);
-                // the properties of a persistence unit exist for the default unit and for any named unit
+                // a persistence unit property exists for the default unit and for any named unit
                 boolean perUnit = mappingProperties.containsKey(HibernateOrmProperties.PREFIX + ".*." + suffix);
                 result.merge(name, new HibernateOrmProperty(name, buildTime, perUnit, typeOf(property)),
                         (existing, added) -> existing.buildTime() ? added : existing);
@@ -182,8 +172,7 @@ public final class HibernateOrmPropertiesGenerator {
     }
 
     /**
-     * Serializes the properties to the format of {@value HibernateOrmProperties#RESOURCE}, a properties file with a line
-     * {@code <name>=<build-time|run-time>,<unit|global>,<type>} per property, sorted by name.
+     * Serializes the properties to the format of {@link HibernateOrmProperties#RESOURCE}, sorted by name.
      */
     public static byte[] serialize(Collection<HibernateOrmProperty> properties) {
         Map<String, HibernateOrmProperty> sorted = new TreeMap<>();

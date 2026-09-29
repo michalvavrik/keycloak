@@ -442,9 +442,8 @@ public final class PropertyMappers {
                         .filter(m -> m.matchesWildcardOptionName(key))
                         .toList();
                 if (matching.size() > 1) {
-                    // the prefix of a wildcard option may be the prefix of another one, e.g. db-orm-scripts-generation-<datasource>
-                    // and db-orm-scripts-generation-create-target-<datasource> both match db-orm-scripts-generation-create-target-my-store:
-                    // the most specific options, the ones that leave the shortest wildcard value, win
+                    // with overlapping prefixes, e.g. db-orm-scripts-generation-<datasource> and
+                    // db-orm-scripts-generation-create-target-<datasource>, the most specific options win
                     int shortest = matching.stream().mapToInt(m -> wildcardValueLength(m, key)).min().orElseThrow();
                     matching = matching.stream().filter(m -> wildcardValueLength(m, key) == shortest).toList();
                 }

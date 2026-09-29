@@ -27,6 +27,8 @@ import org.mariadb.jdbc.MariaDbDataSource;
 import org.postgresql.ssl.DefaultJavaSSLFactory;
 import org.postgresql.xa.PGXADataSource;
 
+import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
+
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
@@ -35,7 +37,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
 
 public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
 
@@ -1125,12 +1126,11 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
     }
     @Test
     public void hibernateOrmRunTimeOptions() {
-        // the Hibernate ORM properties are collected from the Hibernate ORM extension when this module is built, see
-        // HibernateOrmProperties: an option is a build time option like its property
+        // an option is a build time option like its property, see HibernateOrmProperties
         putEnvVar("KC_DB_ORM_LOG_SQL", "true");
         putEnvVar("KC_DB_ORM_LOG_SQL_MY_STORE", "true");
         putEnvVar("KC_DB_ORM_LOG_SQL_OTHER_STORE", "true");
-        putEnvVar("KC_DB_ORM_SCHEMA_MANAGEMENT_STRATEGY", "validate");
+        putEnvVar("KC_DB_ORM_FLUSH_MODE", "commit");
         ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities",
                 "--db-kind-other-store=mariadb");
         initConfig();
@@ -1148,18 +1148,18 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
         assertConfig(Map.of(
                 "db-orm-log-sql", "true",
                 "db-orm-log-sql-my-store", "true",
-                "db-orm-schema-management-strategy", "validate"));
+                "db-orm-flush-mode", "commit"));
         assertExternalConfig(Map.of(
                 "quarkus.hibernate-orm.log.sql", "true",
                 "quarkus.hibernate-orm.\"my-store\".log.sql", "true",
-                "quarkus.hibernate-orm.schema-management.strategy", "validate"));
+                "quarkus.hibernate-orm.flush.mode", "commit"));
         // db-jpa-packages-other-store does not define a persistence unit for other-store
         assertExternalConfigNull("quarkus.hibernate-orm.\"other-store\".log.sql");
     }
 
     @Test
     public void hibernateOrmOptionsOfOverlappingProperties() {
-        // the name of a property may be the prefix of another one, which the options of a named datasource must tell apart
+        // a property name may be the prefix of another one
         putEnvVar("KC_DB_ORM_SCRIPTS_GENERATION", "create");
         putEnvVar("KC_DB_ORM_SCRIPTS_GENERATION_CREATE_TARGET", "/tmp/create.sql");
         putEnvVar("KC_DB_ORM_SCRIPTS_GENERATION_MY_STORE", "drop-and-create");
@@ -1186,21 +1186,25 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
         ConfigArgsConfigSource.setCliArgs("--db=postgres", "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities");
         initConfig();
 
-        // the properties Keycloak configures itself, and the properties mapped from other options such as db-dialect
+        // properties that Keycloak configures itself, properties mapped from other options, and properties that would
+        // break Keycloak
         for (String option : List.of("db-orm-packages", "db-orm-datasource", "db-orm-persistence-xml-ignore", "db-orm-mapping-files",
-                "db-orm-dialect", "db-orm-database-default-schema", "db-orm-log-queries-slower-than-ms")) {
+                "db-orm-dialect", "db-orm-database-default-schema", "db-orm-log-queries-slower-than-ms",
+                "db-orm-enabled", "db-orm-active", "db-orm-jdbc-enabled", "db-orm-reactive-enabled", "db-orm-multitenant",
+                "db-orm-dev-ui-allow-hql", "db-orm-validate-in-dev-mode", "db-orm-sql-load-script", "db-orm-physical-naming-strategy",
+                "db-orm-implicit-naming-strategy", "db-orm-quote-identifiers-strategy", "db-orm-schema-management-strategy",
+                "db-orm-schema-management-create-schemas", "db-orm-schema-management-halt-on-error", "db-orm-schema-management-extra-physical-table-types")) {
             assertNull(option, PropertyMappers.getMapper(NS_KEYCLOAK_PREFIX + option));
             assertNull(option, PropertyMappers.getMapper(NS_KEYCLOAK_PREFIX + option + "-my-store"));
         }
-        // a property of the extension as a whole has no option for a named datasource
-        assertEquals("quarkus.hibernate-orm.enabled", PropertyMappers.getMapper("kc.db-orm-enabled").getTo());
-        assertTrue(PropertyMappers.getMapper("kc.db-orm-enabled").isBuildTime());
-        assertNull(PropertyMappers.getMapper("kc.db-orm-enabled-my-store"));
+        // a property of the extension as a whole has no named datasource variant
+        assertEquals("quarkus.hibernate-orm.metrics.enabled", PropertyMappers.getMapper("kc.db-orm-metrics-enabled").getTo());
+        assertTrue(PropertyMappers.getMapper("kc.db-orm-metrics-enabled").isBuildTime());
+        assertNull(PropertyMappers.getMapper("kc.db-orm-metrics-enabled-my-store"));
         assertEquals("quarkus.hibernate-orm.request-scoped.enabled", PropertyMappers.getMapper("kc.db-orm-request-scoped-enabled").getTo());
         assertNull(PropertyMappers.getMapper("kc.db-orm-request-scoped-enabled-my-store"));
 
-        // all the db-orm-* options map to a Hibernate ORM property, without a default of their own, and none of them is a
-        // command line option
+        // every db-orm-* option maps to a Hibernate ORM property, has no default and is not a command line option
         List<PropertyMapper<?>> mappers = Stream.concat(PropertyMappers.getMappers().stream(), PropertyMappers.getWildcardMappers().stream())
                 .filter(m -> m.getOption().getKey().startsWith(DatabaseOptions.DB_ORM_PREFIX)).toList();
         assertThat(mappers.stream().map(m -> m.getOption().getKey()).toList(), hasItem("db-orm-jdbc-statement-batch-size"));
