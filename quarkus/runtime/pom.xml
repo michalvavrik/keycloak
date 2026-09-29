@@ -759,6 +759,19 @@
         </dependency>
 
         <dependency>
+            <!-- defines the build time Hibernate ORM properties that HibernateOrmPropertiesGenerator collects when this
+                 module is built: on the class path of the generator only, neither packaged nor inherited by the server -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-orm-deployment</artifactId>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
@@ -814,6 +827,29 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+            <plugin>
+                <!-- generates the Quarkus Hibernate ORM properties that Keycloak exposes as db-orm-* options into the jar,
+                     see HibernateOrmPropertiesGenerator: the build time properties are defined by the deployment module
+                     of the Hibernate ORM extension, which is not on the class path of the server -->
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-hibernate-orm-properties</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>org.keycloak.quarkus.runtime.configuration.HibernateOrmPropertiesGenerator</mainClass>
+                            <classpathScope>compile</classpathScope>
+                            <arguments>
+                                <argument>${project.build.outputDirectory}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
