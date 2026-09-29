@@ -1125,6 +1125,36 @@ public class DatasourcesConfigurationTest extends AbstractConfigurationTest {
                 JpaUtils.loadSpecificNamedQueries("mariadb").getProperty("deleteExpiredClientSessions[native]")));
     }
     @Test
+    public void persistenceUnitMappersAreSyntheticDuplicatesOfTheOptions() {
+        SmallRyeConfig config = createConfigFromCliArguments("--db=postgres", "--db-schema=other", "--db-log-slow-queries-threshold=5000",
+                "--db-kind-my-store=mariadb", "--db-jpa-packages-my-store=org.example.entities", "--db-schema-my-store=named",
+                "--db-log-slow-queries-threshold-my-store=1234");
+
+        for (String option : List.of("db-dialect", "db-schema", "db-log-slow-queries-threshold")) {
+            List<PropertyMapper<?>> mappers = PropertyMappers.getMappers(NS_KEYCLOAK_PREFIX + option);
+            assertEquals(option, 1, mappers.size());
+            assertFalse(option, mappers.get(0).getOption().isSynthetic());
+            List<PropertyMapper<?>> namedMappers = PropertyMappers.getMappers(NS_KEYCLOAK_PREFIX + option + "-my-store");
+            assertEquals(option, 2, namedMappers.size());
+            assertEquals(option, 1, namedMappers.stream().filter(m -> m.getOption().isSynthetic()).count());
+            assertFalse(option, PropertyMappers.getMapper(NS_KEYCLOAK_PREFIX + option + "-my-store").getOption().isSynthetic());
+        }
+        for (String property : List.of("quarkus.hibernate-orm.dialect", "quarkus.hibernate-orm.database.default-schema",
+                "quarkus.hibernate-orm.log.queries-slower-than-ms")) {
+            List<PropertyMapper<?>> mappers = PropertyMappers.getMappers(property);
+            assertEquals(property, 1, mappers.size());
+            assertTrue(property, mappers.get(0).getOption().isSynthetic());
+        }
+
+        assertEquals(PostgreSQLDialect.class.getName(), config.getConfigValue("quarkus.hibernate-orm.dialect").getValue());
+        assertEquals("other", config.getConfigValue("quarkus.hibernate-orm.database.default-schema").getValue());
+        assertEquals("5000", config.getConfigValue("quarkus.hibernate-orm.log.queries-slower-than-ms").getValue());
+        assertEquals(MariaDBDialect.class.getName(), config.getConfigValue("quarkus.hibernate-orm.\"my-store\".dialect").getValue());
+        assertEquals("named", config.getConfigValue("quarkus.hibernate-orm.\"my-store\".database.default-schema").getValue());
+        assertEquals("1234", config.getConfigValue("quarkus.hibernate-orm.\"my-store\".log.queries-slower-than-ms").getValue());
+    }
+
+    @Test
     public void hibernateOrmRunTimeOptions() {
         // an option is a build time option like its property, see HibernateOrmProperties
         putEnvVar("KC_DB_ORM_LOG_SQL", "true");
