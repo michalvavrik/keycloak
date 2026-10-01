@@ -40,6 +40,8 @@ The reload does not apply to database (JDBC) connections or to connections to a 
 
 Removing a certificate takes effect for new connections only. Existing pooled or keep-alive connections keep using the trust established when they were opened, until those connections are closed.
 
+If a reload fails, for example because a file or directory listed in `--truststore-paths` was deleted or cannot be read, {project_name} logs a warning and keeps using the previously loaded system truststore. To stop trusting the certificates in a file listed in `--truststore-paths`, remove them from the file instead of deleting the file, or remove the file from `--truststore-paths` and restart {project_name}.
+
 Because a reload applies changes to the truststore without a restart, restrict write access to the files and directories referenced by `--truststore-paths` to trusted administrators.
 
 TIP: It takes time for file changes to be detected and for all internal components to adopt the new truststore. To prevent rejected connections during this window, use an overlapping rotation strategy: add the new CA certificate alongside the old one, wait for the reload period and connection pools to cycle, and only then remove the old CA certificate.
