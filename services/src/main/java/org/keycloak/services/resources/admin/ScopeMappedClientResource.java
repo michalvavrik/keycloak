@@ -99,6 +99,7 @@ public class ScopeMappedClientResource {
         viewPermission.require();
 
         return KeycloakModelUtils.getClientScopeMappingsStream(scopedClient, scopeContainer)
+                .filter(auth.roles()::canViewScopeMapping)
                 .map(ModelToRepresentation::toBriefRepresentation);
     }
 
@@ -146,6 +147,7 @@ public class ScopeMappedClientResource {
                 ModelToRepresentation::toBriefRepresentation : ModelToRepresentation::toRepresentation;
         return scopedClient.getRolesStream()
                 .filter(scopeContainer::hasScope)
+                .filter(auth.roles()::canViewScopeMapping)
                 .map(toBriefRepresentation);
     }
 

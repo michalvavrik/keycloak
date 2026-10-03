@@ -102,6 +102,15 @@ public interface RolePermissionEvaluator {
     void requireMapClientScope(RoleModel role);
 
     /**
+     * Returns {@code true} if the role may be listed among the scope mappings of a client or a client scope, that is
+     * if {@link #canView(RoleModel)} or {@link #canMapClientScope(RoleModel)} returns {@code true}.
+     * <p/>
+     * Roles the caller can map to client scopes are listed among the available roles anyway, so hiding them from the
+     * current scope mappings would only hide the result of the caller's own actions.
+     */
+    boolean canViewScopeMapping(RoleModel role);
+
+    /**
      * Returns {@code true} if {@link RolePermissions#canManageDefault(RoleModel)} and {@link RolePermissions#checkAdminRoles(RoleModel)} returns {@code true}.
      * <p/>
      * Or if the role is a client role and {@link ClientPermissions#canMapCompositeRoles(ClientModel)} returns {@code true}.
