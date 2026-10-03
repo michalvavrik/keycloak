@@ -111,6 +111,7 @@ public class ScopeMappedResource {
 
         MappingsRepresentation all = new MappingsRepresentation();
         List<RoleRepresentation> realmRep = scopeContainer.getRealmScopeMappingsStream()
+                .filter(auth.roles()::canViewScopeMapping)
                 .map(ModelToRepresentation::toBriefRepresentation)
                 .collect(Collectors.toList());
         if (!realmRep.isEmpty()) {
@@ -119,7 +120,7 @@ public class ScopeMappedResource {
 
         Stream<ClientModel> clients = realm.getClientsStream();
         Map<String, ClientMappingsRepresentation> clientMappings = clients
-                .map(c -> ScopeMappedUtil.toClientMappingsRepresentation(c, scopeContainer))
+                .map(c -> ScopeMappedUtil.toClientMappingsRepresentation(c, scopeContainer, auth.roles()::canViewScopeMapping))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(ClientMappingsRepresentation::getClient, Function.identity()));
 
@@ -148,6 +149,7 @@ public class ScopeMappedResource {
         }
 
         return scopeContainer.getRealmScopeMappingsStream()
+                .filter(auth.roles()::canViewScopeMapping)
                 .map(ModelToRepresentation::toBriefRepresentation);
     }
 
@@ -204,6 +206,7 @@ public class ScopeMappedResource {
                 ModelToRepresentation::toBriefRepresentation : ModelToRepresentation::toRepresentation;
         return realm.getRolesStream()
                 .filter(scopeContainer::hasScope)
+                .filter(auth.roles()::canViewScopeMapping)
                 .map(toBriefRepresentation);
     }
 
