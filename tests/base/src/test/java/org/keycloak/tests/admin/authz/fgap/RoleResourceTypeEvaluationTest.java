@@ -64,10 +64,12 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -799,6 +801,7 @@ public class RoleResourceTypeEvaluationTest extends AbstractPermissionTest {
 
         RoleRepresentation mappableParent = new RoleRepresentation();
         mappableParent.setName("MAPPABLE_PARENT");
+        mappableParent.setAttributes(Map.of("visibility", List.of("mappable")));
         realm.admin().roles().create(mappableParent);
         mappableParent = realm.admin().roles().get("MAPPABLE_PARENT").toRepresentation();
         realm.cleanup().add(r -> r.roles().get("MAPPABLE_PARENT").remove());
@@ -813,6 +816,7 @@ public class RoleResourceTypeEvaluationTest extends AbstractPermissionTest {
         ClientRepresentation myclient = realm.admin().clients().findByClientId("myclient").get(0);
         RoleRepresentation clientRole = new RoleRepresentation();
         clientRole.setName("CLIENT_ROLE");
+        clientRole.setAttributes(Map.of("visibility", List.of("viewable")));
         realm.admin().clients().get(myclient.getId()).roles().create(clientRole);
         clientRole = realm.admin().clients().get(myclient.getId()).roles().get("CLIENT_ROLE").toRepresentation();
 
@@ -849,11 +853,23 @@ public class RoleResourceTypeEvaluationTest extends AbstractPermissionTest {
         assertThat(roleNames, not(hasItem("SECRET_REALM_ROLE")));
         assertThat(roleNames, not(hasItem("SECRET_REALM_CHILD")));
 
+        // GET /client-scopes/{scopeId}/scope-mappings/realm/composite?briefRepresentation=false
+        // a role the admin can only map to client scopes is listed, but without its attributes
+        List<RoleRepresentation> effectiveRoles = scopeMappings.realmLevel().listEffective(false);
+        assertThat(toNames(effectiveRoles), hasItem("MAPPABLE_PARENT"));
+        assertThat(toNames(effectiveRoles), not(hasItem("SECRET_REALM_ROLE")));
+        assertThat(byName(effectiveRoles, "MAPPABLE_PARENT").getAttributes(), nullValue());
+
         // GET /client-scopes/{scopeId}/scope-mappings/clients/{clientUuid}
         assertThat(toNames(scopeMappings.clientLevel(myclient.getId()).listAll()), hasItem("CLIENT_ROLE"));
 
         // GET /client-scopes/{scopeId}/scope-mappings/clients/{clientUuid}/composite
         assertThat(toNames(scopeMappings.clientLevel(myclient.getId()).listEffective()), hasItem("CLIENT_ROLE"));
+
+        // GET /client-scopes/{scopeId}/scope-mappings/clients/{clientUuid}/composite?briefRepresentation=false
+        // a role the admin can view is listed with its attributes
+        effectiveRoles = scopeMappings.clientLevel(myclient.getId()).listEffective(false);
+        assertThat(byName(effectiveRoles, "CLIENT_ROLE").getAttributes(), hasEntry("visibility", List.of("viewable")));
 
         // GET /client-scopes/{scopeId}/scope-mappings
         MappingsRepresentation mappings = scopeMappings.getAll();
@@ -865,6 +881,10 @@ public class RoleResourceTypeEvaluationTest extends AbstractPermissionTest {
 
     private static Set<String> toNames(List<RoleRepresentation> roles) {
         return roles == null ? Set.of() : roles.stream().map(RoleRepresentation::getName).collect(Collectors.toSet());
+    }
+
+    private static RoleRepresentation byName(List<RoleRepresentation> roles, String name) {
+        return roles.stream().filter(role -> name.equals(role.getName())).findFirst().orElseThrow();
     }
 
     private String getUiExtEndpoint(Client httpClient, String baseUrl, String realmName, String subPath, BearerAuthFilter bearerAuth) {

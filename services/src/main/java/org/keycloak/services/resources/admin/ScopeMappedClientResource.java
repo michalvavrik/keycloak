@@ -18,7 +18,6 @@
 package org.keycloak.services.resources.admin;
 
 import java.util.List;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -143,12 +142,10 @@ public class ScopeMappedClientResource {
     public Stream<RoleRepresentation> getCompositeClientScopeMappings(@Parameter(description = "if false, return roles with their attributes") @QueryParam("briefRepresentation") @DefaultValue("true") boolean briefRepresentation) {
         viewPermission.require();
 
-        Function<RoleModel, RoleRepresentation> toBriefRepresentation = briefRepresentation ?
-                ModelToRepresentation::toBriefRepresentation : ModelToRepresentation::toRepresentation;
         return scopedClient.getRolesStream()
                 .filter(scopeContainer::hasScope)
                 .filter(auth.roles()::canViewScopeMapping)
-                .map(toBriefRepresentation);
+                .map(ScopeMappedResource.toRepresentation(auth, briefRepresentation));
     }
 
     /**
