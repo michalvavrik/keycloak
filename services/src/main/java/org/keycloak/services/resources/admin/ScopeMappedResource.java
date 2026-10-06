@@ -184,7 +184,7 @@ public class ScopeMappedResource {
      * any composite roles associated with the client's scope and adds the roles to this lists.  The method is really
      * to show a comprehensive total view of realm-level roles associated with the client.
      *
-     * @param briefRepresentation if false, return roles with their attributes
+     * @param briefRepresentation if false, return roles with their attributes; attributes are only included for roles the caller is allowed to view
      * 
      * @return
      */
@@ -195,7 +195,7 @@ public class ScopeMappedResource {
     @Tag(name = KeycloakOpenAPI.Admin.Tags.SCOPE_MAPPINGS)
     @Operation(summary = "Get effective realm-level roles associated with the client’s scope What this does is recurse any composite roles associated with the client’s scope and adds the roles to this lists.",
         description = "The method is really to show a comprehensive total view of realm-level roles associated with the client.")
-    public Stream<RoleRepresentation> getCompositeRealmScopeMappings(@Parameter(description = "if false, return roles with their attributes") @QueryParam("briefRepresentation") @DefaultValue("true") boolean briefRepresentation) {
+    public Stream<RoleRepresentation> getCompositeRealmScopeMappings(@Parameter(description = "if false, return roles with their attributes; attributes are only included for roles the caller is allowed to view") @QueryParam("briefRepresentation") @DefaultValue("true") boolean briefRepresentation) {
         viewPermission.require();
 
         if (scopeContainer == null) {
