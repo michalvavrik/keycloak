@@ -62,3 +62,11 @@ The `Skip OTP for Header` (`SKIP_OTP_FOR_HTTP_HEADER`) option in the Conditional
 The `Force OTP for Header` (`FORCE_OTP_FOR_HTTP_HEADER`) option is not affected by this change because forcing OTP is always the safer direction.
 
 Both options should only be used when {project_name} is configured in reverse proxy mode with headers correctly overwritten by the proxy. Without this, any client can inject a matching header value in their request and influence the OTP decision. See https://www.keycloak.org/server/reverseproxy#header-filtering-recommendations[Header filtering recommendations] for more details.
+
+=== Stricter enforcement of the requested level of authentication
+
+Previously, {project_name} could finish a login at a lower level of authentication than requested when the authentication flow skipped the steps for that level.
+This was most common when the user already had a session.
+Such a login now fails with an error page, or with an error response to the client for passive requests.
+In OpenID Connect, this affects levels requested with an essential `acr` claim, and the error for `prompt=none` requests is `unmet_authentication_requirements`.
+In SAML, this affects every requested authentication context and the minimum ACR value of the client, and the status for passive requests is `NoAuthnContext`.
