@@ -31,6 +31,21 @@ bin/kc.[sh|bat] start --spi-authenticator--auth-x509-client-username-form--legac
 
 See link:{adminguide_link}#_x509[X.509 client certificate user authentication] for more information.
 
+=== X.509 authenticators load CRL files only from the `conf` directory
+
+{project_name} now loads a CRL file for X.509 client certificate authentication only when the file path resolves to a location inside the `conf` directory of the {project_name} installation.
+This applies to the *CRL Path* option and to CRL distribution points that contain a file path.
+This change addresses CVE-2026-103884.
+
+Previously, a path that contained `..` segments could point to a file outside the `conf` directory.
+{project_name} now rejects such a path and logs a warning, so the revocation check fails and users cannot authenticate with their client certificates.
+
+If a CRL file is stored outside the `conf` directory, move or mount the file into the `conf` directory and set the *CRL Path* option to the file path relative to that directory.
+Alternatively, provide the CRL from an HTTP or LDAP URL.
+
+If the revocation check of a direct grant request fails because the CRL cannot be loaded or is outdated, the `error_description` in the response no longer contains the CRL location or the cause of the failure.
+{project_name} writes these details to the server log instead.
+
 // ------------------------ Notable changes ------------------------ //
 == Notable changes
 
