@@ -139,17 +139,18 @@ public class AcrStore {
     }
 
     /**
-     * Level reached by an authentication, shared by the enforcement of a requested level and by the ACR protocol mapper: an active
-     * authentication reached at least level 1 and an authentication satisfied solely by the SSO cookie at least level 0. A lower stored
-     * level is ignored, because the cookie authenticator stores the level of the previous authentications before a step-up and nothing
-     * raises it when the flow has no level condition.
+     * Level reached by an authentication, shared by the enforcement of a requested level and by the ACR protocol mapper. A recorded
+     * level wins. Without one, an active authentication is level 1 and an authentication satisfied solely by the SSO cookie is level 0.
      *
-     * @param level level stored for the authentication, {@link Constants#NO_LOA} if none
+     * @param level level recorded for the authentication, {@link Constants#NO_LOA} if none
      * @param ssoAuthentication true if the authentication was satisfied solely by the SSO cookie
      * @return the effective level, never lower than {@link Constants#MINIMUM_LOA}
      */
     public static int getEffectiveLevelOfAuthentication(int level, boolean ssoAuthentication) {
-        return Math.max(level, ssoAuthentication ? Constants.MINIMUM_LOA : 1);
+        if (level < Constants.MINIMUM_LOA) {
+            return ssoAuthentication ? Constants.MINIMUM_LOA : 1;
+        }
+        return level;
     }
 
 
@@ -265,6 +266,10 @@ public class AcrStore {
         int currentTime = Time.currentTime();
 
         Map<Integer, Integer> configuredMaxAges = LoAUtil.getLoaMaxAgesConfiguredInRealmFlow(authSession.getRealm(), flowId);
+        if (configuredMaxAges.isEmpty()) {
+            // the flow has no level conditions, the levels of the previous authentications do not apply to it
+            return NO_LOA;
+        }
         levels = new TreeMap<>(levels);
 
         for (Map.Entry<Integer, Integer> entry : levels.entrySet()) {

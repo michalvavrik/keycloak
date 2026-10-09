@@ -35,8 +35,6 @@ import org.keycloak.testframework.realm.ManagedRealm;
 import org.keycloak.testframework.realm.ManagedUser;
 import org.keycloak.testframework.remote.runonserver.InjectRunOnServer;
 import org.keycloak.testframework.remote.runonserver.RunOnServerClient;
-import org.keycloak.testframework.remote.timeoffset.InjectTimeOffSet;
-import org.keycloak.testframework.remote.timeoffset.TimeOffSet;
 import org.keycloak.testframework.ui.annotations.InjectPage;
 import org.keycloak.testframework.ui.annotations.InjectWebDriver;
 import org.keycloak.testframework.ui.page.ErrorPage;
@@ -88,9 +86,6 @@ public class LevelOfAssuranceEssentialAcrTest {
 
     @InjectMailServer
     MailServer mailServer;
-
-    @InjectTimeOffSet
-    TimeOffSet timeOffSet;
 
     @InjectPage
     LoginPage loginPage;
@@ -248,6 +243,27 @@ public class LevelOfAssuranceEssentialAcrTest {
     }
 
     @Test
+    public void essentialAcrLevel1AboveConfiguredLevel0Fails() {
+        // the condition defines the password as level 0, the active login does not raise it
+        configureFlowWithLevel0Condition();
+
+        loginFormWithAcrClaim(true, "1").open();
+        fillUsernameAndPassword();
+
+        assertAcrNotFulfilled(1, 0);
+    }
+
+    @Test
+    public void essentialAcrLevel0ConfiguredConditionReportsLevel0() {
+        configureFlowWithLevel0Condition();
+
+        loginFormWithAcrClaim(true, "0").open();
+        fillUsernameAndPassword();
+
+        assertLoggedInWithAcr("0");
+    }
+
+    @Test
     public void essentialAcrLevel0WithoutConditionsWithSsoSucceeds() {
         configureFlowWithoutLevelConditions();
         loginWithUsernamePassword();
@@ -338,18 +354,16 @@ public class LevelOfAssuranceEssentialAcrTest {
     }
 
     @Test
-    public void essentialAcrLevel1WithoutConditionsAfterStepUpLevelsExpiredReauthenticates() {
-        // the levels authenticated by the step-up flow are kept in the user session, but they are not valid for a flow without conditions
+    public void essentialAcrLevel1WithoutConditionsWithLevelsFromStepUpFlowReauthenticates() {
+        // the levels authenticated by the step-up flow are kept in the user session, but they do not apply to a flow without conditions
         loginWithUsernamePassword();
         configureFlowWithoutLevelConditions();
-        timeOffSet.set(5);
 
         loginFormWithAcrClaim(true, "1").open();
         passwordPage.assertCurrent();
         passwordPage.fillPassword(user.getPassword());
         passwordPage.submit();
 
-        // the active re-authentication is level 1, not the level 0 which the cookie authenticator stored for the step-up
         assertLoggedInWithAcr("1");
     }
 
@@ -434,6 +448,28 @@ public class LevelOfAssuranceEssentialAcrTest {
                         .clear()
                         .addAuthenticatorExecution(Requirement.REQUIRED, UsernameFormFactory.PROVIDER_ID)
                         .addAuthenticatorExecution(Requirement.REQUIRED, PasswordFormFactory.PROVIDER_ID)
+                )
+                .defineAsBrowserFlow()
+        );
+    }
+
+    /**
+     * Username form followed by a conditional subflow with a level 0 condition and the password form.
+     */
+    private void configureFlowWithLevel0Condition() {
+        runOnServer.run(session -> FlowUtil.inCurrentRealm(session)
+                .selectFlow(FLOW_ALIAS)
+                .inForms(forms -> forms
+                        .clear()
+                        .addAuthenticatorExecution(Requirement.REQUIRED, UsernameFormFactory.PROVIDER_ID)
+                        .addSubFlowExecution(Requirement.CONDITIONAL, subflow -> subflow
+                                .addAuthenticatorExecution(Requirement.REQUIRED, ConditionalLoaAuthenticatorFactory.PROVIDER_ID,
+                                        config -> {
+                                            config.getConfig().put(ConditionalLoaAuthenticator.LEVEL, "0");
+                                            config.getConfig().put(ConditionalLoaAuthenticator.MAX_AGE, String.valueOf(ConditionalLoaAuthenticator.DEFAULT_MAX_AGE));
+                                        })
+                                .addAuthenticatorExecution(Requirement.REQUIRED, PasswordFormFactory.PROVIDER_ID)
+                        )
                 )
                 .defineAsBrowserFlow()
         );
@@ -526,15 +562,23 @@ public class LevelOfAssuranceEssentialAcrTest {
     }
 
     private void assertAcrNotFulfilled(int fulfilledLevel) {
+        assertAcrNotFulfilled(2, fulfilledLevel);
+    }
+
+    private void assertAcrNotFulfilled(int requestedLevel, int fulfilledLevel) {
         errorPage.assertCurrent();
         assertThat(errorPage.getError(), is("Authentication requirements not fulfilled"));
-        assertAcrNotFulfilledEvent(fulfilledLevel);
+        assertAcrNotFulfilledEvent(requestedLevel, fulfilledLevel);
     }
 
     private void assertAcrNotFulfilledEvent(int fulfilledLevel) {
+        assertAcrNotFulfilledEvent(2, fulfilledLevel);
+    }
+
+    private void assertAcrNotFulfilledEvent(int requestedLevel, int fulfilledLevel) {
         EventAssertion.expectLoginError(events.poll())
                 .error(Errors.GENERIC_AUTHENTICATION_ERROR)
-                .details(Details.AUTHENTICATION_ERROR_DETAIL, acrNotFulfilledDetail(2, fulfilledLevel));
+                .details(Details.AUTHENTICATION_ERROR_DETAIL, acrNotFulfilledDetail(requestedLevel, fulfilledLevel));
     }
 
     private static String acrNotFulfilledDetail(int requestedLevel, int fulfilledLevel) {
