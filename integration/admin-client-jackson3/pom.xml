@@ -17,6 +17,9 @@
         <maven.compiler.release>17</maven.compiler.release>
         <version.tools.jackson>3.1.7</version.tools.jackson>
         <version.resteasy.jackson.provider>1.0.0.Final</version.resteasy.jackson.provider>
+        <version.invoker.plugin>3.9.1</version.invoker.plugin>
+        <!-- default for the consumer integration test below, overridden by -DskipTests -->
+        <skipTests>false</skipTests>
     </properties>
 
     <dependencies>
@@ -34,6 +37,19 @@
             <groupId>dev.resteasy.providers</groupId>
             <artifactId>resteasy-jackson-provider</artifactId>
             <version>${version.resteasy.jackson.provider}</version>
+            <!--
+              The provider is built against RESTEasy 7, the admin client runs on the RESTEasy version used by the rest of
+              Keycloak. Inside this build the parent POM forces every RESTEasy artifact to that version, consumers of the
+              published artifact do not inherit that dependency management and would end up with RESTEasy 7 core jars
+              next to the RESTEasy client jars of resteasy.version. Excluding them here makes consumers resolve a single
+              RESTEasy version; src/it/consumer verifies that.
+            -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.jboss.resteasy</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.jboss.resteasy</groupId>
@@ -41,5 +57,41 @@
             <version>${resteasy.version}</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!--
+                  Builds src/it/consumer as a standalone project against the artifact of this module. Only a project
+                  outside of this build resolves the dependency tree the way consumers of the published artifact do,
+                  as the dependency management of the parent POM is not applied to them.
+                -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-invoker-plugin</artifactId>
+                <version>${version.invoker.plugin}</version>
+                <configuration>
+                    <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
+                    <streamLogs>true</streamLogs>
+                    <skipInstallation>${skipTests}</skipInstallation>
+                    <skipInvocation>${skipTests}</skipInvocation>
+                    <filterProperties>
+                        <resteasy.version>${resteasy.version}</resteasy.version>
+                        <maven.compiler.release>${maven.compiler.release}</maven.compiler.release>
+                        <maven-compiler-plugin.version>${maven-compiler-plugin.version}</maven-compiler-plugin.version>
+                        <version.surefire.plugin>${version.surefire.plugin}</version.surefire.plugin>
+                    </filterProperties>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>consumer-integration-test</id>
+                        <goals>
+                            <goal>install</goal>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

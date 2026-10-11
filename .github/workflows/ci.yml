@@ -1327,6 +1327,9 @@ jobs:
       - name: Run Base smoke tests with Jackson 3
         run: ./mvnw verify -pl tests/base -Pjackson3
 
+      - name: Run Admin Client consumer tests with Jackson 3
+        run: ./mvnw verify -pl integration/admin-client-jackson3
+
   mixed-cluster-compatibility-tests:
     name: Cluster Compatibility Tests
     if: needs.version-compatibility.outputs.matrix != 'skip'
