@@ -179,10 +179,11 @@ jobs:
     name: dnf GPG verification inside the real server Dockerfile under Docker
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Fetch the repository without any third-party action
+        run: git clone -q --depth 1 --branch "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" kc && git -C kc log --oneline -1
 
       - name: Build the real server image with a dummy distribution
-        working-directory: quarkus/container
+        working-directory: kc/quarkus/container
         run: |
           mkdir keycloak-999.0.0-SNAPSHOT && echo null > keycloak-999.0.0-SNAPSHOT/dummy
           tar czf keycloak-999.0.0-SNAPSHOT.tar.gz keycloak-999.0.0-SNAPSHOT && rm -rf keycloak-999.0.0-SNAPSHOT
