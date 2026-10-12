@@ -154,10 +154,12 @@ jobs:
       - name: skopeo copy as a pre-build gate
         run: |
           set +e
-          skopeo --policy /tmp/pol/policy-rh.json copy "docker://$RH_IMG" oci:/tmp/verified:ubi9-micro >/dev/null 2>&1
-          echo "RESULT skopeo-copy-signed-red-hat-image: exit=$? (accepted)" | tee -a /tmp/results.txt
-          skopeo --policy /tmp/pol/policy-rh.json copy "docker://$UNSIGNED_IMG" oci:/tmp/unsigned:latest 2>&1 | tail -1 | cut -c1-220
-          echo "RESULT skopeo-copy-unsigned-image-default-reject: exit=${PIPESTATUS[0]} (rejected)" | tee -a /tmp/results.txt
+          skopeo --policy /tmp/pol/policy-rh.json copy --remove-signatures "docker://$RH_IMG" oci:/tmp/verified:ubi9-micro 2>&1 | tail -1
+          echo "RESULT skopeo-copy-signed-red-hat-image: exit=${PIPESTATUS[0]} (0 means accepted after signature verification)" | tee -a /tmp/results.txt
+          skopeo --policy /tmp/pol/policy-wrongkey.json copy --remove-signatures "docker://$RH_IMG" oci:/tmp/wrong:ubi9-micro 2>&1 | tail -1 | cut -c1-220
+          echo "RESULT skopeo-copy-signed-image-wrong-key: exit=${PIPESTATUS[0]} (non-zero means rejected)" | tee -a /tmp/results.txt
+          skopeo --policy /tmp/pol/policy-rh.json copy --remove-signatures "docker://$UNSIGNED_IMG" oci:/tmp/unsigned:latest 2>&1 | tail -1 | cut -c1-220
+          echo "RESULT skopeo-copy-unsigned-image-default-reject: exit=${PIPESTATUS[0]} (non-zero means rejected)" | tee -a /tmp/results.txt
 
       - name: podman build --pull=always with the policy
         run: |
