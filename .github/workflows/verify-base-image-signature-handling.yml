@@ -1,0 +1,204 @@
+name: Verify base image signature handling on ubuntu-latest
+
+# Throwaway verification workflow. It checks, on a real GitHub-hosted Ubuntu runner,
+# what Docker, Buildx, Podman and Skopeo do with Red Hat image signatures by default
+# and with an explicit policy, and whether dnf verifies package signatures inside the
+# real server Dockerfile when built with Docker.
+
+on:
+  push:
+    branches:
+      - 'dev-auto/keycloak-50089/verify-**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RH_IMG: registry.access.redhat.com/ubi9-micro:latest
+  UNSIGNED_IMG: quay.io/keycloak/keycloak:26.8.0
+
+jobs:
+  docker-and-buildx:
+    name: Docker and Buildx on ubuntu-latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner facts
+        run: |
+          head -2 /etc/os-release
+          docker version --format 'server={{.Server.Version}} client={{.Client.Version}}'
+          docker buildx version
+          echo "--- /etc/docker/daemon.json ---"; cat /etc/docker/daemon.json 2>/dev/null || echo "(absent)"
+          echo "--- ~/.docker/config.json ---"; cat ~/.docker/config.json 2>/dev/null || echo "(absent)"
+          echo "--- env ---"; env | grep -iE 'DOCKER|TRUST' || echo "(no DOCKER_* or *TRUST* variables set)"
+
+      - name: docker pull with runner defaults
+        run: |
+          docker pull "$RH_IMG"
+          echo "RESULT docker-pull-defaults: exit=$? (accepted)" | tee -a /tmp/results.txt
+          D=$(docker image inspect "$RH_IMG" --format '{{index .RepoDigests 0}}' | sed 's/.*@//')
+          echo "resolved digest: $D"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://access.redhat.com/webassets/docker/content/sigstore/ubi9-micro@${D/:/=}/signature-1")
+          echo "RESULT red-hat-signature-published-for-pulled-digest: HTTP $code (Docker never fetched it)" | tee -a /tmp/results.txt
+
+      - name: docker pull with DOCKER_CONTENT_TRUST=1
+        env:
+          DOCKER_CONTENT_TRUST: "1"
+        run: |
+          set +e
+          docker pull "$RH_IMG" 2>&1 | tail -3
+          rc=${PIPESTATUS[0]}
+          echo "RESULT docker-pull-DCT: exit=$rc (Notary only, cannot use Red Hat signatures)" | tee -a /tmp/results.txt
+
+      - name: docker build (BuildKit default) FROM the Red Hat image
+        run: |
+          mkdir -p /tmp/b && printf 'FROM %s\nRUN echo ok > /hello\n' "$RH_IMG" > /tmp/b/Dockerfile
+          docker build --no-cache --pull -t verify-default /tmp/b
+          echo "RESULT docker-build-defaults: exit=$? (no signature check)" | tee -a /tmp/results.txt
+
+      - name: docker build with DOCKER_CONTENT_TRUST=1
+        env:
+          DOCKER_CONTENT_TRUST: "1"
+        run: |
+          set +e
+          docker build --no-cache --pull -t verify-dct /tmp/b 2>&1 | tail -4
+          rc=${PIPESTATUS[0]}
+          echo "RESULT docker-build-DCT: exit=$rc" | tee -a /tmp/results.txt
+
+      - name: buildx with docker-container driver (what keycloak-rel uses)
+        run: |
+          docker buildx create --name verify --driver docker-container --use
+          docker buildx inspect --bootstrap | grep -iE 'driver|buildkit' | head -3
+          docker buildx build --no-cache --pull --platform linux/amd64 --provenance=mode=min --output type=oci,dest=/tmp/out.tar /tmp/b
+          echo "RESULT buildx-build-docker-container-driver: exit=$? (no signature check)" | tee -a /tmp/results.txt
+
+      - name: buildx with DOCKER_CONTENT_TRUST=1
+        env:
+          DOCKER_CONTENT_TRUST: "1"
+        run: |
+          set +e
+          docker buildx build --no-cache --pull --platform linux/amd64 --output type=oci,dest=/tmp/out2.tar /tmp/b 2>&1 | tail -3
+          rc=${PIPESTATUS[0]}
+          echo "RESULT buildx-build-DCT: exit=$rc" | tee -a /tmp/results.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          { echo '### Docker and Buildx'; echo '```'; cat /tmp/results.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  podman-and-skopeo:
+    name: Podman and Skopeo on ubuntu-latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ubuntu defaults as shipped on the runner
+        run: |
+          podman --version; skopeo --version; buildah --version
+          dpkg-query -W -f='${Package} ${Version}\n' podman skopeo buildah golang-github-containers-common 2>/dev/null || true
+          echo "--- /etc/containers/policy.json ---"; cat /etc/containers/policy.json
+          echo "--- /etc/containers/registries.d ---"; ls -la /etc/containers/registries.d/ 2>&1 || true
+          echo "--- podman image trust show ---"; podman image trust show
+          if grep -rl signedBy /etc/containers /usr/share/containers 2>/dev/null; then
+            echo "RESULT ubuntu-podman-default-policy: signedBy present" | tee -a /tmp/results.txt
+          else
+            echo "RESULT ubuntu-podman-default-policy: insecureAcceptAnything, no signedBy anywhere" | tee -a /tmp/results.txt
+          fi
+
+      - name: podman pull with runner defaults
+        run: |
+          podman pull -q "$RH_IMG" >/dev/null
+          echo "RESULT podman-pull-defaults: exit=$? (accepted, nothing verified)" | tee -a /tmp/results.txt
+
+      - name: Prepare Red Hat key, a wrong key, policies and lookaside config
+        run: |
+          P=/tmp/pol; mkdir -p "$P"
+          curl -sSL -o "$P/rh.txt" https://access.redhat.com/security/data/fd431d51.txt
+          sed -n '/-----BEGIN PGP PUBLIC KEY BLOCK-----/,/-----END PGP PUBLIC KEY BLOCK-----/p' "$P/rh.txt" > "$P/rh-release-key.asc"
+          gpg --show-keys "$P/rh-release-key.asc" | head -3
+          export GNUPGHOME=$(mktemp -d)
+          gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Throwaway <t@example.invalid>' default default never
+          gpg --armor --export > "$P/wrong-key.asc"
+          cat > "$P/policy-rh.json" <<EOF
+          {"default":[{"type":"reject"}],
+           "transports":{"docker":{"registry.access.redhat.com":[{"type":"signedBy","keyType":"GPGKeys","keyPath":"$P/rh-release-key.asc"}]},
+                         "containers-storage":{"":[{"type":"insecureAcceptAnything"}]}}}
+          EOF
+          sed "s#rh-release-key.asc#wrong-key.asc#" "$P/policy-rh.json" > "$P/policy-wrongkey.json"
+          sed "s#registry.access.redhat.com#quay.io#" "$P/policy-rh.json" > "$P/policy-quay-requires-sig.json"
+          mkdir -p ~/.config/containers/registries.d
+          cp /etc/containers/registries.d/*.yaml ~/.config/containers/registries.d/ 2>/dev/null || true
+          cat > ~/.config/containers/registries.d/registry.access.redhat.com.yaml <<EOF
+          docker:
+            registry.access.redhat.com:
+              lookaside: https://access.redhat.com/webassets/docker/content/sigstore
+          EOF
+          cat "$P/policy-rh.json"
+
+      - name: podman pull with Red Hat signedBy policy, correct key
+        run: |
+          podman pull -q --signature-policy /tmp/pol/policy-rh.json "$RH_IMG" >/dev/null
+          echo "RESULT podman-pull-signedBy-correct-key: exit=$? (accepted after verifying the Red Hat signature)" | tee -a /tmp/results.txt
+
+      - name: podman pull with wrong key
+        run: |
+          set +e
+          podman pull -q --signature-policy /tmp/pol/policy-wrongkey.json "$RH_IMG" 2>&1 | tail -1 | cut -c1-220
+          rc=${PIPESTATUS[0]}
+          echo "RESULT podman-pull-signedBy-wrong-key: exit=$rc (rejected)" | tee -a /tmp/results.txt
+
+      - name: podman pull of an unsigned image when a signature is required
+        run: |
+          set +e
+          podman pull -q --signature-policy /tmp/pol/policy-quay-requires-sig.json "$UNSIGNED_IMG" 2>&1 | tail -1 | cut -c1-220
+          rc=${PIPESTATUS[0]}
+          echo "RESULT podman-pull-unsigned-with-signature-required: exit=$rc (rejected)" | tee -a /tmp/results.txt
+
+      - name: skopeo copy as a pre-build gate
+        run: |
+          set +e
+          skopeo --policy /tmp/pol/policy-rh.json copy "docker://$RH_IMG" oci:/tmp/verified:ubi9-micro >/dev/null 2>&1
+          echo "RESULT skopeo-copy-signed-red-hat-image: exit=$? (accepted)" | tee -a /tmp/results.txt
+          skopeo --policy /tmp/pol/policy-rh.json copy "docker://$UNSIGNED_IMG" oci:/tmp/unsigned:latest 2>&1 | tail -1 | cut -c1-220
+          echo "RESULT skopeo-copy-unsigned-image-default-reject: exit=${PIPESTATUS[0]} (rejected)" | tee -a /tmp/results.txt
+
+      - name: podman build --pull=always with the policy
+        run: |
+          set +e
+          mkdir -p /tmp/b1 /tmp/b2
+          printf 'FROM %s\nRUN echo ok > /hello\n' "$RH_IMG" > /tmp/b1/Containerfile
+          printf 'FROM %s\n' "$UNSIGNED_IMG" > /tmp/b2/Containerfile
+          podman build -q --pull=always --signature-policy /tmp/pol/policy-rh.json -t verify-signed /tmp/b1 >/dev/null
+          echo "RESULT podman-build-signed-base: exit=$? (accepted)" | tee -a /tmp/results.txt
+          podman build -q --pull=always --signature-policy /tmp/pol/policy-rh.json -t verify-unsigned /tmp/b2 2>&1 | tail -1 | cut -c1-220
+          echo "RESULT podman-build-unsigned-base: exit=${PIPESTATUS[0]} (rejected)" | tee -a /tmp/results.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          { echo '### Podman and Skopeo'; echo '```'; cat /tmp/results.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  dnf-gpgcheck-inside-docker-build:
+    name: dnf GPG verification inside the real server Dockerfile under Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the real server image with a dummy distribution
+        working-directory: quarkus/container
+        run: |
+          mkdir keycloak-999.0.0-SNAPSHOT && echo null > keycloak-999.0.0-SNAPSHOT/dummy
+          tar czf keycloak-999.0.0-SNAPSHOT.tar.gz keycloak-999.0.0-SNAPSHOT && rm -rf keycloak-999.0.0-SNAPSHOT
+          set +e
+          docker build --progress=plain --no-cache --pull --build-arg KEYCLOAK_DIST=keycloak-999.0.0-SNAPSHOT.tar.gz -t kc-verify . > /tmp/build.log 2>&1
+          rc=$?
+          tail -5 /tmp/build.log
+          echo "RESULT docker-build-real-server-dockerfile: exit=$rc" | tee -a /tmp/results.txt
+          echo "--- dnf GPG key import lines from inside the build ---"
+          grep -nE 'Importing GPG key|Userid|Fingerprint|From +:' /tmp/build.log | head -12
+          echo "RESULT dnf-gpg-key-imports: $(grep -c 'Importing GPG key' /tmp/build.log)" | tee -a /tmp/results.txt
+          echo "RESULT dnf-verifying-lines: $(grep -c 'Verifying  *:' /tmp/build.log)" | tee -a /tmp/results.txt
+          grep -E 'packages to (erase|keep)' /tmp/build.log | tee -a /tmp/results.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          { echo '### dnf GPG verification inside docker build'; echo '```'; cat /tmp/results.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
