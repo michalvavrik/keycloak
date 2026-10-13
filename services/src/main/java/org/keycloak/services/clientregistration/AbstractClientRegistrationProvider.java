@@ -401,9 +401,21 @@ public abstract class AbstractClientRegistrationProvider implements ClientRegist
     }
 
     /**
-     * Strips privileged {@code ssf.*} attributes from non-Admin representations.
+     * Prefixes of client attributes that grant the client access beyond its own configuration and are therefore
+     * reserved for the Admin API:
+     * <ul>
+     * <li>{@code ssf.*} - Shared Signals Framework receiver settings</li>
+     * <li>{@code external.token.*} - retrieving external identity provider tokens of users through the identity
+     * brokering API, see {@link org.keycloak.protocol.oidc.OIDCConfigAttributes#EXTERNAL_TOKEN_ENABLED} and
+     * {@link org.keycloak.protocol.oidc.OIDCConfigAttributes#EXTERNAL_TOKEN_IDP}</li>
+     * </ul>
+     */
+    private static final Set<String> PRIVILEGED_ATTRIBUTE_PREFIXES = Set.of("ssf.", "external.token.");
+
+    /**
+     * Strips privileged attributes from non-Admin representations.
      *
-     * <p>Reserved for the Admin API; silently removed for DCR callers (IAT/RAT)
+     * <p>Reserved for the Admin API; silently removed for DCR callers (anonymous/IAT/RAT)
      * without throwing an error.
      */
     private void stripPrivilegedAttributes(ClientRepresentation rep) {
@@ -414,6 +426,10 @@ public abstract class AbstractClientRegistrationProvider implements ClientRegist
             return;
         }
         rep.getAttributes().entrySet()
-                .removeIf(e -> e.getKey().startsWith("ssf."));
+                .removeIf(e -> isPrivilegedAttribute(e.getKey()));
+    }
+
+    private static boolean isPrivilegedAttribute(String name) {
+        return PRIVILEGED_ATTRIBUTE_PREFIXES.stream().anyMatch(name::startsWith);
     }
 }
