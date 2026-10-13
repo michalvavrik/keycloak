@@ -194,6 +194,19 @@ public class LevelOfAssuranceEssentialAcrTest {
     }
 
     @Test
+    public void essentialAcrLevel1WithoutConditionsAndPromptNoneWithSsoRequiresLogin() {
+        configureFlowWithoutLevelConditions();
+        loginWithUsernamePassword();
+
+        // the session alone is level 0, so the cookie authenticator starts the step-up and the password form needs the user
+        loginFormWithAcrClaim(true, "1").prompt(OIDCLoginProtocol.PROMPT_VALUE_NONE).open();
+
+        AuthorizationEndpointResponse response = oauth.parseLoginResponse();
+        assertEquals(OAuthErrorException.LOGIN_REQUIRED, response.getError());
+        assertNull(response.getCode());
+    }
+
+    @Test
     public void essentialAcrLevel1WithoutConditionsSucceeds() {
         configureFlowWithoutLevelConditions();
 
@@ -232,11 +245,26 @@ public class LevelOfAssuranceEssentialAcrTest {
     }
 
     @Test
+    public void essentialAcrLevel1WithoutConditionsAndPromptNoneNonInteractiveSucceeds() {
+        configureFlowWithoutLevelConditions();
+        loginWithUsernamePassword();
+        configureFlowWithAllowAccess();
+
+        // the allow access step completes the login after the cookie authenticator started the step-up, which is an active
+        // authentication, so level 1 is reached without user interaction
+        loginFormWithAcrClaim(true, "1").prompt(OIDCLoginProtocol.PROMPT_VALUE_NONE).open();
+
+        assertLoggedInWithAcr("1");
+    }
+
+    @Test
     public void nonEssentialAcrLevel2WithoutConditionsAndPromptNoneNonInteractiveSucceeds() {
         configureFlowWithoutLevelConditions();
         loginWithUsernamePassword();
         configureFlowWithAllowAccess();
 
+        // a level which is not essential is never enforced; the allow access step completes the login after the cookie authenticator
+        // started the step-up, which is an active authentication, so the acr claim reports level 1 as it did before the enforcement
         loginFormWithAcrClaim(false, "2").prompt(OIDCLoginProtocol.PROMPT_VALUE_NONE).open();
 
         assertLoggedInWithAcr("1");

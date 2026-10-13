@@ -207,6 +207,9 @@ public final class Constants {
     public static final String MINIMUM_ACR_VALUE = "minimum.acr.value";
     public static final int MINIMUM_LOA = 0;
     public static final int NO_LOA = -1;
+    // Level reached by an active authentication, which did not record any level, for example in a flow without the
+    // "Condition - Level of Authentication". An authentication satisfied by the SSO cookie alone reaches MINIMUM_LOA instead.
+    public static final int DEFAULT_AUTHENTICATED_LOA = 1;
 
     public static final String SESSION_NOTE_LIGHTWEIGHT_USER = "keycloak.userModel";
 

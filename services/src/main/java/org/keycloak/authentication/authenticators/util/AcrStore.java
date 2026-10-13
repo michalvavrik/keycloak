@@ -140,7 +140,8 @@ public class AcrStore {
 
     /**
      * Level reached by an authentication, shared by the enforcement of a requested level and by the ACR protocol mapper. A recorded
-     * level wins. Without one, an active authentication is level 1 and an authentication satisfied solely by the SSO cookie is level 0.
+     * level wins. Without one, an active authentication is {@link Constants#DEFAULT_AUTHENTICATED_LOA} and an authentication satisfied
+     * solely by the SSO cookie is {@link Constants#MINIMUM_LOA}.
      *
      * @param level level recorded for the authentication, {@link Constants#NO_LOA} if none
      * @param ssoAuthentication true if the authentication was satisfied solely by the SSO cookie
@@ -148,7 +149,7 @@ public class AcrStore {
      */
     public static int getEffectiveLevelOfAuthentication(int level, boolean ssoAuthentication) {
         if (level < Constants.MINIMUM_LOA) {
-            return ssoAuthentication ? Constants.MINIMUM_LOA : 1;
+            return ssoAuthentication ? Constants.MINIMUM_LOA : Constants.DEFAULT_AUTHENTICATED_LOA;
         }
         return level;
     }
