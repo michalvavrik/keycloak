@@ -31,6 +31,7 @@ import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 
+import org.keycloak.authentication.authenticators.broker.AbstractIdpAuthenticator;
 import org.keycloak.authentication.authenticators.browser.AbstractUsernameFormAuthenticator;
 import org.keycloak.authentication.authenticators.conditional.ConditionalAuthenticator;
 import org.keycloak.authentication.authenticators.conditional.ConditionalLoaAuthenticatorFactory;
@@ -631,9 +632,14 @@ public class DefaultAuthenticationFlow implements AuthenticationFlow {
      * The forced level is checked by the callback of the "Condition - Level of Authentication" authenticator, which is otherwise
      * registered only once a level condition is evaluated. Register it up-front, so the check runs even when the flow has no level
      * condition or skips all of them, for example because the user has no credential for the requested level.
+     * While a first broker login is in progress, the authentication continues in the post broker login flow, which can still reach
+     * the requested level and registers the check on its own, so the intermediate flows do not register it.
      */
     private void registerForcedLevelOfAuthenticationCheck() {
         AuthenticationSessionModel authSession = processor.getAuthenticationSession();
+        if (authSession.getAuthNote(AbstractIdpAuthenticator.BROKERED_CONTEXT_NOTE) != null) {
+            return;
+        }
         if (new AcrStore(processor.getSession(), authSession).isLevelOfAuthenticationForced()) {
             AuthenticatorUtil.setAuthCallbacksFactoryIds(authSession, ConditionalLoaAuthenticatorFactory.PROVIDER_ID);
         }
