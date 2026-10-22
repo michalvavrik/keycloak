@@ -50,7 +50,7 @@ public class MultiTenancyPersistenceUnitDistTest {
             "--db-kind-database-store=dev-mem", "--db-kind-schema-store=dev-mem",
             "--db-kind-disc-store=dev-mem", "--db-kind-mem-tenant=dev-mem" })
     void schemaMultiTenancyRoutesToSchema(CLIResult result) {
-        result.assertMessage("Persistence unit 'schema-store' uses SCHEMA multi-tenancy");
+        result.assertMessage("Persistence unit 'schema-store' sets tenant schemas on connections shared with the server");
         when().post(BASE + "/schema/PUBLIC/s").then().statusCode(204);
 
         assertEquals(List.of("s"), listIds("schema", "PUBLIC"));
@@ -61,7 +61,7 @@ public class MultiTenancyPersistenceUnitDistTest {
             "--db-kind-database-store=dev-mem", "--db-kind-schema-store=dev-mem",
             "--db-kind-disc-store=dev-mem", "--db-kind-mem-tenant=dev-mem" })
     void schemaTenantDoesNotAffectServerQueriesWhenDbSchemaSet(CLIResult result) {
-        result.assertNoStartupMessage("uses SCHEMA multi-tenancy");
+        result.assertNoStartupMessage("sets tenant schemas on connections shared with the server");
         // INFORMATION_SCHEMA holds none of the server tables, so an unqualified server query would fail
         when().get(BASE + "/schema/INFORMATION_SCHEMA/server-query").then().statusCode(200);
         when().get(BASE + "/schema/INFORMATION_SCHEMA/server-query").then().statusCode(200);

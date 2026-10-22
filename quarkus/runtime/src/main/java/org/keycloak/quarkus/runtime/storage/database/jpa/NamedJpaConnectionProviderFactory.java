@@ -57,10 +57,10 @@ public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnecti
                 return;
             }
         }
+        // A tenant schema stays set on pooled server connections that Keycloak reuses; only db-schema keeps Keycloak's own SQL unaffected.
         if (schemaMultiTenancy && Configuration.getOptionalKcValue(DatabaseOptions.DB_SCHEMA).isEmpty()) {
-            logger.warnf("Persistence unit '%s' uses SCHEMA multi-tenancy, so its tenants share connections with the server datasource."
-                    + " Set the 'db-schema' option to the schema of the server tables, otherwise a tenant schema can leak"
-                    + " into the server's own queries.", unitName);
+            logger.warnf("Persistence unit '%s' sets tenant schemas on connections shared with the server; set 'db-schema' to the server's"
+                    + " schema to keep them out of server queries.", unitName);
         }
         super.postInit(factory);
     }
