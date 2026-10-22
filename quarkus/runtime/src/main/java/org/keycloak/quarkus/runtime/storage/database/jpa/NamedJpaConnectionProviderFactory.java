@@ -22,6 +22,7 @@ import java.util.function.Supplier;
 
 import jakarta.persistence.EntityManagerFactory;
 
+import org.keycloak.config.DatabaseOptions;
 import org.keycloak.connections.jpa.JpaConnectionProvider;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
@@ -40,6 +41,7 @@ public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnecti
     private String unitName;
     private String dataSourceName;
     private boolean dataSourceRequired = true;
+    private boolean schemaMultiTenancy;
 
     @Override
     public void postInit(KeycloakSessionFactory factory) {
@@ -54,6 +56,11 @@ public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnecti
                 }
                 return;
             }
+        }
+        if (schemaMultiTenancy && Configuration.getOptionalKcValue(DatabaseOptions.DB_SCHEMA).isEmpty()) {
+            logger.warnf("Persistence unit '%s' uses SCHEMA multi-tenancy, so its tenants share connections with the server datasource."
+                    + " Set the 'db-schema' option to the schema of the server tables, otherwise a tenant schema can leak"
+                    + " into the server's own queries.", unitName);
         }
         super.postInit(factory);
     }
@@ -106,6 +113,14 @@ public final class NamedJpaConnectionProviderFactory extends AbstractJpaConnecti
 
     public void setDataSourceRequired(boolean dataSourceRequired) {
         this.dataSourceRequired = dataSourceRequired;
+    }
+
+    public boolean isSchemaMultiTenancy() {
+        return schemaMultiTenancy;
+    }
+
+    public void setSchemaMultiTenancy(boolean schemaMultiTenancy) {
+        this.schemaMultiTenancy = schemaMultiTenancy;
     }
 
     @Override

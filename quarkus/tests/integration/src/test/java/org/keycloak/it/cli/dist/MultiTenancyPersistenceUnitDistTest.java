@@ -2,6 +2,7 @@ package org.keycloak.it.cli.dist;
 
 import java.util.List;
 
+import org.keycloak.it.junit5.extension.CLIResult;
 import org.keycloak.it.junit5.extension.DistributionTest;
 import org.keycloak.it.junit5.extension.RawDistOnly;
 import org.keycloak.it.junit5.extension.StopServer;
@@ -48,7 +49,32 @@ public class MultiTenancyPersistenceUnitDistTest {
     @Launch({ "start-dev", "--db=dev-file",
             "--db-kind-database-store=dev-mem", "--db-kind-schema-store=dev-mem",
             "--db-kind-disc-store=dev-mem", "--db-kind-mem-tenant=dev-mem" })
-    void schemaMultiTenancyRoutesToSchema() {
+    void schemaMultiTenancyRoutesToSchema(CLIResult result) {
+        result.assertMessage("Persistence unit 'schema-store' uses SCHEMA multi-tenancy");
+        when().post(BASE + "/schema/PUBLIC/s").then().statusCode(204);
+
+        assertEquals(List.of("s"), listIds("schema", "PUBLIC"));
+    }
+
+    @Test
+    @Launch({ "start-dev", "--db=dev-file", "--db-schema=PUBLIC",
+            "--db-kind-database-store=dev-mem", "--db-kind-schema-store=dev-mem",
+            "--db-kind-disc-store=dev-mem", "--db-kind-mem-tenant=dev-mem" })
+    void schemaTenantDoesNotAffectServerQueriesWhenDbSchemaSet(CLIResult result) {
+        result.assertNoStartupMessage("uses SCHEMA multi-tenancy");
+        // INFORMATION_SCHEMA holds none of the server tables, so an unqualified server query would fail
+        when().get(BASE + "/schema/INFORMATION_SCHEMA/server-query").then().statusCode(200);
+        when().get(BASE + "/schema/INFORMATION_SCHEMA/server-query").then().statusCode(200);
+        when().post(BASE + "/schema/PUBLIC/s").then().statusCode(204);
+
+        assertEquals(List.of("s"), listIds("schema", "PUBLIC"));
+    }
+
+    @Test
+    @Launch({ "start-dev", "--db=dev-file",
+            "--db-kind-database-store=dev-mem", "--db-kind-schema-store=dev-mem", "--db-enabled-schema-store=false",
+            "--db-kind-disc-store=dev-mem", "--db-kind-mem-tenant=dev-mem" })
+    void schemaMultiTenancyWorksWhenDeclaredDatasourceDisabled() {
         when().post(BASE + "/schema/PUBLIC/s").then().statusCode(204);
 
         assertEquals(List.of("s"), listIds("schema", "PUBLIC"));

@@ -72,6 +72,20 @@ public class MultiTenancyResource implements RealmResourceProvider {
         }
     }
 
+    @GET
+    @Path("schema/{tenant}/server-query")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Response serverQueryAfterTenantSchemaSwitch(@PathParam("tenant") String tenant) {
+        TenantContext.set(tenant);
+        try {
+            // switches the schema of a connection taken from the server datasource
+            session.getProvider(JpaConnectionProvider.class, "schema-store").getEntityManager().createNativeQuery("SELECT 1").getSingleResult();
+        } finally {
+            TenantContext.clear();
+        }
+        return Response.ok(String.valueOf(session.users().getUsersCount(session.getContext().getRealm())), MediaType.TEXT_PLAIN).build();
+    }
+
     private static Object newEntity(String unit, String id) {
         switch (unit) {
             case "database" -> {

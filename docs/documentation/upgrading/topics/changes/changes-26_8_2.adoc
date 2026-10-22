@@ -1,0 +1,12 @@
+// ------------------------ Notable changes ------------------------ //
+== Notable changes
+
+Notable changes may include internal behavior changes that prevent common misconfigurations, bugs that are fixed, or changes to simplify running {project_name}.
+It also lists significant changes to internal APIs.
+
+=== Set `db-schema` when custom persistence units use `SCHEMA` multi-tenancy
+
+A persistence unit defined in the `META-INF/persistence.xml` file of a provider with `hibernate.multiTenancy` set to `SCHEMA` gets its tenant connections from the server datasource.
+The schema selected for a tenant stays set on these pooled connections, so queries that {project_name} runs on them can target the tenant schema instead of its own.
+To avoid this, set the `db-schema` option to the schema that holds the {project_name} tables, for example `public` on PostgreSQL.
+{project_name} logs a warning at startup if such a persistence unit exists and `db-schema` is not set.

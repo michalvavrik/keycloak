@@ -559,8 +559,7 @@ class KeycloakProcessor {
             // A unit with DATABASE or SCHEMA multi-tenancy obtains its connections from a TenantConnectionResolver, so
             // Quarkus must neither require nor inject the unit's own datasource (it may be disabled or simply unused).
             // Bind such a unit to the always-present default datasource at the Quarkus level, as Quarkus itself does for
-            // persistence.xml units; Keycloak keeps the declared datasource name for its db-*-<datasource> options and
-            // for the default TenantConnectionResolver (see UserPersistenceUnitBuildItem below).
+            // persistence.xml units; Keycloak keeps the declared datasource name for its db-*-<datasource> options.
             String quarkusDataSourceName = multiTenancyStrategy.requiresMultiTenantConnectionProvider()
                     ? DataSourceUtil.DEFAULT_DATASOURCE_NAME
                     : datasourceName;
@@ -798,13 +797,15 @@ class KeycloakProcessor {
             }
             String unitName = unit.getUnitName();
             logger.debugf("Enabling %s multi-tenancy for persistence unit '%s'", strategy, unitName);
+            // SCHEMA tenants use the server datasource rather than the declared one. Imperfect, as a tenant schema sticks to pooled
+            // connections Keycloak reuses (db-schema avoids the impact), but existing tenant schemas live there, so we keep it for now.
             syntheticBeans.produce(SyntheticBeanBuildItem.configure(DataSourceTenantConnectionResolver.class)
                     .scope(ApplicationScoped.class)
                     .types(TenantConnectionResolver.class)
                     .setRuntimeInit()
                     .defaultBean()
                     .unremovable()
-                    .supplier(recorder.createDataSourceTenantConnectionResolver(unitName, unit.getDataSourceName(), strategy))
+                    .supplier(recorder.createDataSourceTenantConnectionResolver(unitName, DataSourceUtil.DEFAULT_DATASOURCE_NAME, strategy))
                     .addQualifier().annotation(DotNames.NAMED).addValue("value", unitName).done()
                     .addQualifier().annotation(PersistenceUnit.class).addValue("value", unitName).done()
                     .done());
@@ -962,6 +963,7 @@ class KeycloakProcessor {
             // A DATABASE or SCHEMA multi-tenant unit resolves its connections per tenant, so it must stay active even
             // when its declared datasource is disabled or has no connectivity of its own.
             factory.setDataSourceRequired(!unit.getMultiTenancyStrategy().requiresMultiTenantConnectionProvider());
+            factory.setSchemaMultiTenancy(unit.getMultiTenancyStrategy() == MultiTenancyStrategy.SCHEMA);
             factories.get(spi).get(JpaConnectionProvider.class).put(unitName, NamedJpaConnectionProviderFactory.class);
             preConfiguredProviders.put(unitName, factory);
         }
