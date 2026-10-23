@@ -163,9 +163,10 @@ public class SsfSubjectRemovalGraceTests {
             mockReceiverServer.removeContext(PUSH_CONTEXT_NO_GRACE);
         } catch (IllegalArgumentException ignored) {
         }
-        // Admin-remove clears the per-user notify state on both
-        // receivers without leaving a tombstone, so the next test
-        // starts from a clean slate.
+        // Admin add clears any tombstone left by a receiver-driven
+        // remove, and admin remove then clears the per-user notify
+        // state without stamping a new one. The next test starts from
+        // a clean slate.
         bestEffortAdminClear(RECEIVER_GRACE);
         bestEffortAdminClear(RECEIVER_NO_GRACE);
         bestEffortDeleteAllOrganizations();
@@ -355,6 +356,7 @@ public class SsfSubjectRemovalGraceTests {
 
     protected void bestEffortAdminClear(String clientId) {
         try {
+            adminSubjectRequest(clientId, "subjects/add", "user-email", TEST_EMAIL).close();
             adminSubjectRequest(clientId, "subjects/remove", "user-email", TEST_EMAIL).close();
         } catch (Exception ignored) {
         }
