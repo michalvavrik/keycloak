@@ -556,11 +556,10 @@ class KeycloakProcessor {
 
             String datasourceName = getDatasourceNameFromPersistenceXml(descriptor);
             MultiTenancyStrategy multiTenancyStrategy = getMultiTenancyStrategy(puName, descriptor.getProperties());
-            // A unit with DATABASE or SCHEMA multi-tenancy obtains its connections from a TenantConnectionResolver, so
-            // Quarkus must neither require nor inject the unit's own datasource (it may be disabled or simply unused).
-            // Bind such a unit to the always-present default datasource at the Quarkus level, as Quarkus itself does for
-            // persistence.xml units; Keycloak keeps the declared datasource name for its db-*-<datasource> options.
-            String quarkusDataSourceName = multiTenancyStrategy.requiresMultiTenantConnectionProvider()
+            // SCHEMA tenants are schemas of the server database, so such a unit is bound to the default datasource at the
+            // Quarkus level; Keycloak keeps the declared datasource name for its db-*-<datasource> options.
+            // A DATABASE unit stays on its declared datasource, so Quarkus derives its dialect and database version from it.
+            String quarkusDataSourceName = multiTenancyStrategy == MultiTenancyStrategy.SCHEMA
                     ? DataSourceUtil.DEFAULT_DATASOURCE_NAME
                     : datasourceName;
             AdditionalPersistenceUnitBuildItem.Builder builder = AdditionalPersistenceUnitBuildItem.builder(puName)
@@ -590,6 +589,12 @@ class KeycloakProcessor {
                     }
                     builder.property(key, value);
                 }
+            }
+            if (multiTenancyStrategy == MultiTenancyStrategy.DATABASE) {
+                // Quarkus records no multi-tenancy for units contributed through the SPI and would resolve the declared
+                // datasource on start (it may be disabled), although tenants get connections from a TenantConnectionResolver.
+                // A datasource named in the unit makes Quarkus skip that lookup.
+                builder.property(JdbcSettings.JAKARTA_JTA_DATASOURCE, datasourceName);
             }
             ValidationMode validationMode = descriptor.getValidationMode();
             if (validationMode != null && validationMode != ValidationMode.AUTO) {

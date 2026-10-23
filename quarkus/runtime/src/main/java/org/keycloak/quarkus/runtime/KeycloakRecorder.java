@@ -289,8 +289,8 @@ public class KeycloakRecorder {
 
     /**
      * Supplies the default {@link DataSourceTenantConnectionResolver} for a DATABASE/SCHEMA multi-tenant user
-     * persistence unit, pointed at the datasource declared in its persistence.xml (used as-is for SCHEMA; for DATABASE
-     * the tenant identifier selects the datasource and this value is ignored).
+     * persistence unit, pointed at the given datasource (used as-is for SCHEMA; for DATABASE the tenant identifier
+     * selects the datasource and this value is ignored).
      */
     public Supplier<DataSourceTenantConnectionResolver> createDataSourceTenantConnectionResolver(String persistenceUnitName,
             String dataSourceName, MultiTenancyStrategy multiTenancyStrategy) {
