@@ -7,6 +7,7 @@ import org.junit.platform.suite.api.Suite;
 @SelectPackages({
         "org.keycloak.tests.theme",
         "org.keycloak.tests.tracing",
+        "org.keycloak.tests.federation",
         "org.keycloak.tests.login",
         "org.keycloak.tests.loginfailures",
         "org.keycloak.tests.migration",
