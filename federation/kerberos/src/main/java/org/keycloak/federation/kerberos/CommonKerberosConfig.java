@@ -18,6 +18,8 @@
 package org.keycloak.federation.kerberos;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Stream;
 
 import org.keycloak.common.constants.KerberosConstants;
 import org.keycloak.common.util.MultivaluedHashMap;
@@ -63,12 +65,15 @@ public abstract class CommonKerberosConfig {
         return realms.stream().filter(StringUtil::isNotBlank).map(String::trim).toList();
     }
 
+    // Compared on the canonical form, because case folding would also accept Unicode look-alikes of a realm
     public boolean isAllowedKerberosRealm(String realm) {
         if (realm == null) {
             return false;
         }
-        return realm.equalsIgnoreCase(getKerberosRealm())
-                || getAllowedKerberosRealms().stream().anyMatch(realm::equalsIgnoreCase);
+        String canonical = realm.toUpperCase(Locale.ROOT);
+        return Stream.concat(Stream.ofNullable(getKerberosRealm()), getAllowedKerberosRealms().stream())
+                .map(allowed -> allowed.toUpperCase(Locale.ROOT))
+                .anyMatch(canonical::equals);
     }
 
     public String getServerPrincipal() {

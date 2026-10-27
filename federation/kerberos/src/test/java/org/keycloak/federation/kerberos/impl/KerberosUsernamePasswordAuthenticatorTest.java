@@ -1,5 +1,6 @@
 package org.keycloak.federation.kerberos.impl;
 
+import java.util.Locale;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginException;
 
@@ -36,6 +37,22 @@ public class KerberosUsernamePasswordAuthenticatorTest {
     @Test
     public void allowedRealmsAreTrimmedAndBlankEntriesIgnored() throws LoginException {
         Assert.assertEquals("jduke@KC2.COM", authenticator(" kc2.com ", "").getKerberosPrincipal("jduke@KC2.COM"));
+    }
+
+    @Test
+    public void realmIsCanonicalizedIndependentlyOfTheDefaultLocale() throws LoginException {
+        Locale original = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+        try {
+            Assert.assertEquals("jduke@INVALID.EXAMPLE", authenticator("invalid.example").getKerberosPrincipal("jduke@invalid.example"));
+        } finally {
+            Locale.setDefault(original);
+        }
+    }
+
+    @Test(expected = LoginException.class)
+    public void lookalikeRealmIsRejected() throws LoginException {
+        authenticator("KC2.COM").getKerberosPrincipal("jduke@\u212AC2.COM");
     }
 
     @Test(expected = LoginException.class)
