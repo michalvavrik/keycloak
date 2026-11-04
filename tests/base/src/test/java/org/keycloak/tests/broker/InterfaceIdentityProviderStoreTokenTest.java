@@ -25,7 +25,6 @@ import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -150,9 +149,6 @@ public interface InterfaceIdentityProviderStoreTokenTest {
 
     @Test
     default void testDcrClientCannotSelfGrantExternalTokenAccess() throws ClientRegistrationException {
-        // TODO remove the assumption once https://github.com/keycloak/keycloak/pull/53752 is merged. Until then V1 only
-        Assumptions.assumeFalse(isIdentityBrokeringAPIV1(), "Identity Brokering API V1 does not check the external token client attributes yet");
-
         ManagedRealm realm = getRealm();
         OAuthClient oauth = getOAuthClient();
 
